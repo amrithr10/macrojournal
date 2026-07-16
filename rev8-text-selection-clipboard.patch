@@ -41,6 +41,45 @@ index c4addfd..504906f 100644
  }
  
  // status storage
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
+index 966d565..d7a67e4 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
+@@ -6,6 +6,7 @@
+ 
+ //
+ #include "service/Editor/Editor.h"
++#include "../../WordProcessor/WordProcessor.h"
+ 
+ //
+ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -39,6 +40,12 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+         u8->println(" [S] SYNC ");
+     }
+ 
++    // Ask Claude - only offered once claude.json is on the drive
++    if (gfs()->exists("/claude.json"))
++    {
++        u8->println(" [C] ASK CLAUDE");
++    }
++
+     u8->println(" [W] WIFI");
+     u8->println(" [L] LANGUAGE");
+     u8->println(" [T] BLE KEYBOARD");
+@@ -82,6 +89,13 @@ void Home_keyboard(char key)
+         }
+     }
+ 
++    else if (key == 'C' || key == 'c')
++    {
++        // open the Ask Claude screen (only if configured)
++        if (gfs()->exists("/claude.json"))
++            WP_requestAskClaude();
++    }
++
+     else if (key == 'D' || key == 'd')
+     {
+         // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 index bade544..6fcea89 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
