@@ -530,7 +530,7 @@ index dc0b18b..f2edd94 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..e903dae 100644
+index d8832fa..863cb44 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -604,7 +604,7 @@ index d8832fa..e903dae 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,79 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,83 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -633,6 +633,10 @@ index d8832fa..e903dae 100644
 +            return KEY_CUT;
 +        if (letter == 'v')
 +            return KEY_PASTE;
++        if (letter == 'z')
++            return KEY_UNDO;
++        if (letter == 'y')
++            return KEY_REDO;
 +
 +        // Ctrl/GUI + Shift + N: open the to-do scratchpad
 +        if (letter == 'n' && _shift_pressed)
@@ -684,7 +688,7 @@ index d8832fa..e903dae 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +378,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +382,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -698,7 +702,7 @@ index d8832fa..e903dae 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..fef612e 100644
+index aa3d65d..67a8871 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -725,7 +729,7 @@ index aa3d65d..fef612e 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,74 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,80 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -796,6 +800,12 @@ index aa3d65d..fef612e 100644
 +
 +        else if (key == "DELETE_WORD")
 +            return KEY_DELETE_WORD;
++
++        else if (key == "UNDO")
++            return KEY_UNDO;
++
++        else if (key == "REDO")
++            return KEY_REDO;
 +
          else if (key == "FILE0")
              return 1000;
@@ -1226,10 +1236,20 @@ index 0000000..69f44c4
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..739a06f 100644
+index 45f7e4a..c200c10 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-@@ -155,6 +155,9 @@ void Editor::loadFile(String fileName)
+@@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
+     composer.reset();
+     updateScreen();
+ 
++    // start with a clean, empty-buffer undo baseline
++    historyReset();
++
+     //
+     savingInProgress = false;
+ 
+@@ -155,6 +158,9 @@ void Editor::loadFile(String fileName)
      resetBuffer();
      composer.reset();
  
@@ -1239,7 +1259,17 @@ index 45f7e4a..739a06f 100644
      // Read file content into text buffer
      int bufferSize = 0;
      while (file.available())
-@@ -224,6 +227,33 @@ int Editor::nextCharStart(int pos)
+@@ -178,6 +184,9 @@ void Editor::loadFile(String fileName)
+     // Update the Screen Buffer
+     updateScreen();
+ 
++    // a freshly loaded file starts a new undo history
++    historyReset();
++
+     // Update the word count
+     wordCountFile = wordcounter_file(fileName.c_str());
+     wordCountBuffer = wordcounter_buffer(buffer);
+@@ -224,6 +233,33 @@ int Editor::nextCharStart(int pos)
      return pos;
  }
  
@@ -1273,7 +1303,7 @@ index 45f7e4a..739a06f 100644
  // Move a file offset back to the start of a UTF-8 character so a window
  // never begins in the middle of a multi-byte sequence.
  static size_t alignToCharStart(File &file, size_t pos)
-@@ -483,6 +513,10 @@ bool Editor::loadWindow(size_t offset, size_t length)
+@@ -483,6 +519,10 @@ bool Editor::loadWindow(size_t offset, size_t length)
  
      resetBuffer();
      composer.reset();
@@ -1284,7 +1314,18 @@ index 45f7e4a..739a06f 100644
      size_t bytesRead = 0;
      while (bytesRead < length && file.available())
      {
-@@ -558,6 +592,53 @@ void Editor::pageForward()
+@@ -496,6 +536,10 @@ bool Editor::loadWindow(size_t offset, size_t length)
+     loadedLength = bytesRead;
+     pageChanged = true;
+ 
++    // the window now shows a different part of the file - old snapshots
++    // must not be restorable over it
++    historyReset();
++
+     _debug("Editor::loadWindow offset: %d length: %d read: %d\n", offset, length, bytesRead);
+ 
+     return true;
+@@ -558,6 +602,53 @@ void Editor::pageForward()
      updateScreen();
  }
  
@@ -1338,15 +1379,32 @@ index 45f7e4a..739a06f 100644
  // The buffer filled up while typing. Flush it, then keep going from
  // wherever this window ended - either a fresh empty tail window, or the
  // next chunk of on-disk content if this wasn't the tail. Replaces the old
-@@ -600,6 +681,7 @@ void Editor::advanceWindow()
+@@ -600,7 +691,11 @@ void Editor::advanceWindow()
          loadedLength = 0;
          resetBuffer();
          cursorPos = 0;
 +        selectAnchor = -1;
          pageChanged = true;
++
++        // fresh window - undo history from the previous window is invalid
++        historyReset();
      }
      else
-@@ -716,8 +798,11 @@ void Editor::keyboard(int key, bool pressed)
+     {
+@@ -709,6 +804,12 @@ void Editor::loop()
+             }
+         }
+     }
++
++    // Fold a settled edit burst into one undo step. 600ms of no typing
++    // marks the boundary between undo groups, so undo removes a phrase's
++    // worth of edits rather than one character at a time.
++    if (undoDirty && now - undoLastEdit > 600)
++        historyCommit();
+ }
+ 
+ // Handle Keyboard Input
+@@ -716,8 +817,11 @@ void Editor::keyboard(int key, bool pressed)
  {
      // ignore non printable character
      // (1 is the "consumed" sentinel from the keyboard locale layer,
@@ -1360,10 +1418,28 @@ index 45f7e4a..739a06f 100644
          return;
  
      //
-@@ -750,11 +835,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +854,120 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
++        //////////////////////////
++        // UNDO / REDO
++        //////////////////////////
++        // handled here (not a buffer mutation), before the selection/edit
++        // branches, so they can't misread the code
++        if (key == KEY_UNDO)
++        {
++            composer.reset();
++            undo();
++            return;
++        }
++        if (key == KEY_REDO)
++        {
++            composer.reset();
++            redo();
++            return;
++        }
++
 +        //////////////////////////
 +        // SELECTION
 +        //////////////////////////
@@ -1464,7 +1540,7 @@ index 45f7e4a..739a06f 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +974,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +1011,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -1479,7 +1555,7 @@ index 45f7e4a..739a06f 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +1017,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1054,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -1491,7 +1567,7 @@ index 45f7e4a..739a06f 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1030,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1067,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -1505,7 +1581,7 @@ index 45f7e4a..739a06f 100644
                  }
                  else
                  {
-@@ -858,7 +1048,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1085,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -1514,7 +1590,7 @@ index 45f7e4a..739a06f 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1060,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1097,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -1524,7 +1600,7 @@ index 45f7e4a..739a06f 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1133,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1170,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -1534,7 +1610,7 @@ index 45f7e4a..739a06f 100644
                      }
                      else
                      {
-@@ -1025,11 +1217,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1254,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -1637,7 +1713,31 @@ index 45f7e4a..739a06f 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1348,6 +1631,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1284,6 +1604,7 @@ void Editor::addChar(int c)
+         cursorPos += len;
+         buffer[bufferSize + len] = '\0';
+ 
++        markDirty();
+         _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
+     }
+ }
+@@ -1311,6 +1632,7 @@ void Editor::removeLastChar()
+         buffer[bufferSize - len] = 0;
+         cursorPos = start;
+ 
++        markDirty();
+         bufferSize = getBufferSize();
+         _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
+     }
+@@ -1333,6 +1655,7 @@ void Editor::removeCharAtCursor()
+ 
+         // Null terminate the buffer
+         buffer[bufferSize - len] = '\0';
++        markDirty();
+     }
+ }
+ 
+@@ -1348,6 +1671,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1677,6 +1777,7 @@ index 45f7e4a..739a06f 100644
 +
 +    clearSelection();
 +    saved = false;
++    markDirty();
 +
 +    _debug("Editor::deleteSelection %d bytes at %d\n", end - start, start);
 +}
@@ -1756,6 +1857,7 @@ index 45f7e4a..739a06f 100644
 +    cursorPos += len;
 +
 +    saved = false;
++    markDirty();
 +
 +    _debug("Editor::paste %d bytes at %d\n", len, cursorPos - len);
 +}
@@ -1763,8 +1865,12 @@ index 45f7e4a..739a06f 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1381,3 +1783,27 @@ void Editor::removeLastWord()
-     //
+@@ -1378,6 +1822,224 @@ void Editor::removeLastWord()
+ 
+     cursorPos = getBufferSize();
+ 
+-    //
++    markDirty();
      _debug("FileBuffer::removeLastWord %d\n", cursorPos);
  }
 +
@@ -1789,13 +1895,207 @@ index 45f7e4a..739a06f 100644
 +    buffer[bufferSize - len] = '\0';
 +    cursorPos = start;
 +
++    markDirty();
 +    _debug("Editor::deleteWordBeforeCursor removed %d bytes, cursorPos %d\n", len, cursorPos);
 +}
++
++//
++// UNDO / REDO
++//
++// Coalescing: markDirty() timestamps every buffer mutation; historyCommit()
++// (driven off the idle timer in loop(), and forced before undo/redo) folds a
++// settled burst of edits into a single undo step. Snapshots are whole-buffer
++// copies - simple and impossible to desync from the real buffer, at the cost
++// of some RAM, which the per-stack entry and byte caps bound.
++
++// heap copy of a buffer slice, NUL-terminated. nullptr on OOM.
++char *Editor::historyDup(const char *src, int len)
++{
++    char *p = (char *)malloc(len + 1);
++    if (!p)
++        return nullptr;
++    memcpy(p, src, len);
++    p[len] = '\0';
++    return p;
++}
++
++// push onto a stack (newest on top), evicting the oldest entries to stay
++// within both the count and the byte budget
++void Editor::historyPush(UndoState *stack, int &count, size_t &bytes,
++                         char *text, int len, int cursor)
++{
++    if (!text)
++        return;
++
++    // full: drop the oldest
++    if (count >= UNDO_MAX)
++    {
++        free(stack[0].text);
++        bytes -= stack[0].len;
++        memmove(stack, stack + 1, sizeof(UndoState) * (UNDO_MAX - 1));
++        count--;
++    }
++
++    // over budget: keep dropping the oldest (always leave at least this one)
++    while (count > 0 && bytes + (size_t)len > UNDO_BUDGET)
++    {
++        free(stack[0].text);
++        bytes -= stack[0].len;
++        memmove(stack, stack + 1, sizeof(UndoState) * (count - 1));
++        count--;
++    }
++
++    stack[count].text = text;
++    stack[count].len = len;
++    stack[count].cursorPos = cursor;
++    count++;
++    bytes += len;
++}
++
++void Editor::historyClearStack(UndoState *stack, int &count, size_t &bytes)
++{
++    for (int i = 0; i < count; i++)
++        free(stack[i].text);
++    count = 0;
++    bytes = 0;
++}
++
++// overwrite the live buffer with a snapshot
++void Editor::historyRestore(const char *text, int len, int cursor)
++{
++    if (len > BUFFER_SIZE)
++        len = BUFFER_SIZE;
++
++    memcpy(buffer, text, len);
++    buffer[len] = '\0';
++
++    cursorPos = cursor;
++    if (cursorPos > len)
++        cursorPos = len;
++    if (cursorPos < 0)
++        cursorPos = 0;
++
++    composer.reset();
++    clearSelection();
++}
++
++// baseline = current buffer, discard all history. Called whenever the
++// window is (re)loaded so snapshots never cross a window boundary.
++void Editor::historyReset()
++{
++    historyClearStack(undoStack, undoCount, undoBytes);
++    historyClearStack(redoStack, redoCount, redoBytes);
++
++    free(undoBaseline);
++    int len = getBufferSize();
++    undoBaseline = historyDup(buffer, len);
++    undoBaselineLen = undoBaseline ? len : 0;
++    undoBaselineCursor = cursorPos;
++    undoDirty = false;
++}
++
++// a mutation happened - remember when, so the burst can settle
++void Editor::markDirty()
++{
++    undoDirty = true;
++    undoLastEdit = millis();
++}
++
++// fold a settled edit burst into one undo step. No-op if nothing changed.
++void Editor::historyCommit()
++{
++    if (!undoDirty)
++        return;
++
++    // nothing actually changed (e.g. typed then deleted back to baseline)
++    if (undoBaseline && strcmp(undoBaseline, buffer) == 0)
++    {
++        undoDirty = false;
++        return;
++    }
++
++    // the pre-burst baseline becomes an undo step (ownership transferred)
++    if (undoBaseline)
++        historyPush(undoStack, undoCount, undoBytes,
++                    undoBaseline, undoBaselineLen, undoBaselineCursor);
++
++    // a fresh edit invalidates the redo history
++    historyClearStack(redoStack, redoCount, redoBytes);
++
++    // new baseline is the current buffer
++    int len = getBufferSize();
++    undoBaseline = historyDup(buffer, len);
++    undoBaselineLen = undoBaseline ? len : 0;
++    undoBaselineCursor = cursorPos;
++    undoDirty = false;
++}
++
++void Editor::undo()
++{
++    // flush any in-progress burst so it becomes its own undo step first
++    historyCommit();
++
++    if (undoCount == 0)
++        return;
++
++    // current state goes onto the redo stack
++    int curLen = getBufferSize();
++    historyPush(redoStack, redoCount, redoBytes,
++                historyDup(buffer, curLen), curLen, cursorPos);
++
++    // pop the previous state and restore it
++    UndoState s = undoStack[--undoCount];
++    undoBytes -= s.len;
++    historyRestore(s.text, s.len, s.cursorPos);
++    free(s.text);
++
++    // baseline follows the buffer
++    free(undoBaseline);
++    int len = getBufferSize();
++    undoBaseline = historyDup(buffer, len);
++    undoBaselineLen = undoBaseline ? len : 0;
++    undoBaselineCursor = cursorPos;
++    undoDirty = false;
++
++    saved = false;
++    pageChanged = true; // full redraw
++    updateScreen();
++}
++
++void Editor::redo()
++{
++    // a pending edit invalidates redo - committing it clears the stack
++    historyCommit();
++
++    if (redoCount == 0)
++        return;
++
++    // current state goes back onto the undo stack
++    int curLen = getBufferSize();
++    historyPush(undoStack, undoCount, undoBytes,
++                historyDup(buffer, curLen), curLen, cursorPos);
++
++    UndoState s = redoStack[--redoCount];
++    redoBytes -= s.len;
++    historyRestore(s.text, s.len, s.cursorPos);
++    free(s.text);
++
++    free(undoBaseline);
++    int len = getBufferSize();
++    undoBaseline = historyDup(buffer, len);
++    undoBaselineLen = undoBaseline ? len : 0;
++    undoBaselineCursor = cursorPos;
++    undoDirty = false;
++
++    saved = false;
++    pageChanged = true;
++    updateScreen();
++}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..89ba2c8 100644
+index 15a36fe..2468d2c 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,65 @@
+@@ -16,6 +16,69 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -1852,6 +2152,10 @@ index 15a36fe..89ba2c8 100644
 +// Ctrl/GUI + Backspace: delete the whole word before the cursor
 +#define KEY_DELETE_WORD 2123
 +
++// Ctrl/GUI + Z / Y: undo / redo
++#define KEY_UNDO 2124
++#define KEY_REDO 2125
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -1861,7 +2165,7 @@ index 15a36fe..89ba2c8 100644
  //
  class Editor
  {
-@@ -117,6 +176,11 @@ public:
+@@ -117,6 +180,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -1873,7 +2177,7 @@ index 15a36fe..89ba2c8 100644
      //
      bool savingInProgress = false;
  
-@@ -138,18 +202,60 @@ public:
+@@ -138,18 +206,74 @@ public:
      void removeLastChar();
      void removeCharAtCursor();
      void removeLastWord();
@@ -1884,6 +2188,20 @@ index 15a36fe..89ba2c8 100644
      HangulComposer composer;
      void replaceCharBeforeCursor(uint32_t codepoint);
  
++    //////////////////////////////////
++    // UNDO / REDO
++    //
++    // Full-buffer snapshots, time-coalesced: a burst of typing collapses
++    // into one undo step once editing pauses. The history is tied to the
++    // loaded 8 KB window - it is cleared whenever the buffer is swapped to
++    // a different part of the file, since a snapshot from another window
++    // must never be restored over the current one.
++    void undo();
++    void redo();
++    void markDirty();       // note a buffer mutation (called by the editors)
++    void historyCommit();   // fold a settled edit burst into an undo step
++    void historyReset();    // baseline = current buffer, drop all history
++
 +    //////////////////////////////////
 +    // SELECTION AND CLIPBOARD
 +    //
@@ -1934,3 +2252,43 @@ index 15a36fe..89ba2c8 100644
      //
      void updateScreen();
  
+@@ -170,4 +294,39 @@ public:
+ private:
+     // Private constructor to prevent instantiation
+     Editor() {}
++
++    //////////////////////////////////
++    // UNDO / REDO internals
++    // Snapshots are heap copies sized to their content, held in two
++    // bounded stacks (oldest at index 0, newest on top). Both the entry
++    // count and the total bytes are capped, so history can never exhaust
++    // RAM regardless of how much is typed.
++    struct UndoState
++    {
++        char *text;
++        int len;
++        int cursorPos;
++    };
++    static const int UNDO_MAX = 10;       // at most 10 undo steps
++    static const int UNDO_BUDGET = 16000; // bytes per stack (secondary cap)
++
++    UndoState undoStack[UNDO_MAX];
++    UndoState redoStack[UNDO_MAX];
++    int undoCount = 0;
++    int redoCount = 0;
++    size_t undoBytes = 0;
++    size_t redoBytes = 0;
++
++    // the committed state the next edit burst is measured against
++    char *undoBaseline = nullptr;
++    int undoBaselineLen = 0;
++    int undoBaselineCursor = 0;
++    bool undoDirty = false;
++    unsigned long undoLastEdit = 0;
++
++    char *historyDup(const char *src, int len);
++    void historyPush(UndoState *stack, int &count, size_t &bytes,
++                     char *text, int len, int cursor);
++    void historyClearStack(UndoState *stack, int &count, size_t &bytes);
++    void historyRestore(const char *text, int len, int cursor);
+ };
