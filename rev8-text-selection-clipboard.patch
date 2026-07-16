@@ -1,40 +1,137 @@
+diff --git a/micro-journal-rev-4-esp32/platformio.ini b/micro-journal-rev-4-esp32/platformio.ini
+index 4f545ba..7caed8e 100644
+--- a/micro-journal-rev-4-esp32/platformio.ini
++++ b/micro-journal-rev-4-esp32/platformio.ini
+@@ -555,8 +555,9 @@ build_src_filter =
+   +<service/WordCounter/*>
+   +<service/Send/*>
+   +<service/MassStorage/*>
+-  
+-lib_ignore = 
++  +<service/AskClaude/*>
++
++lib_ignore =
+   FatFSUSB
+   EPD
+   EspUsbHost
+diff --git a/micro-journal-rev-4-esp32/src/app/app.cpp b/micro-journal-rev-4-esp32/src/app/app.cpp
+index c4addfd..504906f 100644
+--- a/micro-journal-rev-4-esp32/src/app/app.cpp
++++ b/micro-journal-rev-4-esp32/src/app/app.cpp
+@@ -24,6 +24,10 @@
+ 
+ #ifdef BOARD_ESP32_S3
+ #include "service/Sync/Sync.h"
++
++#ifdef REV8
++#include "service/AskClaude/AskClaude.h"
++#endif
+ #endif
+ 
+ #ifdef BATTERY
+@@ -176,6 +180,11 @@ void app_loop()
+ #ifdef BOARD_ESP32_S3
+     sync_loop();
+ #endif
++
++#ifdef REV8
++    // Ask Claude requests run here on the background core
++    askclaude_loop();
++#endif
+ }
+ 
+ // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..b6788a7 100644
+index bade544..6fcea89 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-@@ -44,6 +44,31 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+@@ -6,6 +6,7 @@
+ 
+ //
+ #include "service/Editor/Editor.h"
++#include "service/AskClaude/AskClaude.h"
+ 
+ //
+ int STATUSBAR_Y = 295;
+@@ -44,6 +45,77 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
  // active font, selected in WP_setup from config "font"
  static EditorFont *wp_font = &WP_FONTS[0];
  
-+// TO-DO SCRATCHPAD (Ctrl+Shift+N)
-+// The scratchpad is the hidden file slot 10 ("/10.txt") - one above the
-+// Fn+0..9 range - so saving, word counts, sync and Drive Mode all work
-+// unchanged. While open, this remembers the file to return to on ESC;
-+// -1 means the scratchpad is not open.
-+static int scratch_prev_index = -1;
++// OVERLAY SCREENS
++// The to-do scratchpad (Ctrl+Shift+N) and the Ask Claude screen
++// (Ctrl+Shift+C) are hidden file slots 10 and 11 ("/10.txt", "/11.txt") -
++// above the Fn+0..9 range - so saving, word counts, sync and Drive Mode
++// all work unchanged. While one is open, this remembers the file to
++// return to on ESC; -1 means no overlay is open.
++static int overlay_prev_index = -1;
 +#define SCRATCH_FILE_INDEX 10
++#define ASK_FILE_INDEX 11
 +
-+// Open the scratchpad from another screen (e.g. the menu): swap the
-+// configured file index and let WP_setup load it when the screen changes
-+// to the word processor.
-+void WP_requestScratchpad()
++// Swap to an overlay file, remembering where the writer was. Switching
++// between overlays keeps the original return file.
++static void WP_openOverlay(int fileIndex)
 +{
 +    JsonDocument &app = status();
 +
-+    if (scratch_prev_index < 0)
-+    {
-+        scratch_prev_index = app["config"]["file_index"].as<int>();
-+        app["config"]["file_index"] = SCRATCH_FILE_INDEX;
-+        config_save();
-+    }
++    //
++    Editor::getInstance().saveFile();
++
++    if (overlay_prev_index < 0)
++        overlay_prev_index = app["config"]["file_index"].as<int>();
++
++    app["config"]["file_index"] = fileIndex;
++    config_save();
++
++    Editor::getInstance().loadFile(format("/%d.txt", fileIndex));
++}
++
++// Open an overlay from another screen (e.g. the menu): swap the
++// configured file index and let WP_setup load it when the screen changes
++// to the word processor.
++static void WP_requestOverlay(int fileIndex)
++{
++    JsonDocument &app = status();
++
++    if (overlay_prev_index < 0)
++        overlay_prev_index = app["config"]["file_index"].as<int>();
++
++    app["config"]["file_index"] = fileIndex;
++    config_save();
 +
 +    app["screen"] = WORDPROCESSOR;
++}
++
++void WP_requestScratchpad() { WP_requestOverlay(SCRATCH_FILE_INDEX); }
++void WP_requestAskClaude() { WP_requestOverlay(ASK_FILE_INDEX); }
++
++// Append text to the end of the editor buffer, clipped to the buffer
++// capacity. Used to inject the Ask Claude answer.
++static void WP_appendToBuffer(const char *text)
++{
++    Editor &editor = Editor::getInstance();
++
++    int size = editor.getBufferSize();
++    int room = BUFFER_SIZE - size - 1;
++    if (room <= 0)
++        return;
++
++    int len = strlen(text);
++    if (len > room)
++        len = room;
++
++    memcpy(editor.buffer + size, text, len);
++    editor.buffer[size + len] = '\0';
++
++    editor.cursorPos = editor.getBufferSize();
++    editor.saved = false;
++    editor.pageChanged = true; // full redraw
++    editor.updateScreen();
 +}
 +
  // layout derived from the active font metrics in WP_setup
  static int editY = 264;   // baseline of the edit line
  static int cursorY = 270; // top of the cursor band under the edit line
-@@ -91,6 +116,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -91,6 +163,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -45,15 +142,42 @@ index bade544..b6788a7 100644
      // load file from the editor
      int file_index = app["config"]["file_index"].as<int>();
      Editor::getInstance().loadFile(format("/%d.txt", file_index));
-@@ -161,6 +190,7 @@ bool WP_contentChanged()
+@@ -119,6 +195,25 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     // timers
+     WP_check_saved();
+ 
++    // a finished Ask Claude answer is injected while the ask screen is
++    // showing; otherwise it stays pending until the writer returns to it
++    if (askclaude_answer_ready() &&
++        status()["config"]["file_index"].as<int>() == ASK_FILE_INDEX)
++    {
++        String answer = askclaude_take_answer();
++
++        // separator, answer, separator - ready for the next question
++        WP_appendToBuffer("\n---\n");
++        WP_appendToBuffer(answer.c_str());
++        WP_appendToBuffer("\n---\n");
++
++        // persist the exchange right away
++        Editor::getInstance().saveFile();
++
++        display->clearDisplay();
++        clear_background = true;
++    }
++
+     // CLEAR BACKGROUND
+     WP_render_clear(display, u8);
+ 
+@@ -161,6 +256,8 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
++    static int askState_prev = -1;
 +    static int selectAnchor_prev = -1;
  
      JsonDocument &app = status();
  
-@@ -170,6 +200,7 @@ bool WP_contentChanged()
+@@ -170,6 +267,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -61,23 +185,28 @@ index bade544..b6788a7 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,6 +211,7 @@ bool WP_contentChanged()
+@@ -180,7 +278,9 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
+-                   blinkPhase != blinkPhase_prev;
 +                   selectAnchor != selectAnchor_prev ||
-                    blinkPhase != blinkPhase_prev;
++                   blinkPhase != blinkPhase_prev ||
++                   askclaude_status() != askState_prev;
  
      cursorPos_prev = cursorPos;
-@@ -188,6 +220,7 @@ bool WP_contentChanged()
+     cursorLinePos_prev = cursorLinePos;
+@@ -188,7 +288,9 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
 +    selectAnchor_prev = selectAnchor;
      blinkPhase_prev = blinkPhase;
++    askState_prev = askclaude_status();
  
      return changed;
-@@ -244,6 +277,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ }
+@@ -244,6 +346,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -92,7 +221,7 @@ index bade544..b6788a7 100644
      //
      JsonDocument &app = status();
  
-@@ -306,19 +347,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -306,19 +416,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  //
  void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
  {
@@ -159,12 +288,12 @@ index bade544..b6788a7 100644
  }
  
  //
-@@ -382,11 +468,15 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +537,17 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
 -    // FILE INDEX
-+    // FILE INDEX (the scratchpad slot shows as TODO)
++    // FILE INDEX (the overlay slots show by name)
      u8->setFont(u8g2_font_profont17_tf);
      u8->setScale(1);
      u8->setCursor(5, STATUSBAR_Y);
@@ -172,12 +301,49 @@ index bade544..b6788a7 100644
 +    int file_index = app["config"]["file_index"].as<int>();
 +    if (file_index == SCRATCH_FILE_INDEX)
 +        u8->printf("TODO ");
++    else if (file_index == ASK_FILE_INDEX)
++        u8->printf("ASK ");
 +    else
 +        u8->printf("FILE %d ", file_index);
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -486,14 +576,51 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -403,7 +564,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+         u8->printf(locale.c_str());
+     }
+ 
+-    // SAVE STATUS    
++    // SAVE STATUS
+     if (Editor::getInstance().saved)
+     {
+         // when saved write SAVED
+@@ -415,6 +576,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+         // don't show "SAVED"
+         display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
+     }
++
++    // ASK CLAUDE STATUS (busy / error) - overrides the right side of the bar
++    if (askclaude_status() != ASK_IDLE)
++    {
++        display->drawFilledRectangle(160, STATUSBAR_Y - 12, screen_width, screen_height, 0);
++        u8->setCursor(170, STATUSBAR_Y);
++        u8->printf("%.28s", askclaude_status_text());
++    }
+ }
+ 
+ //
+@@ -478,6 +647,10 @@ void WP_keyboard(int key, bool pressed, int index)
+     // Every key stroke resets sleep timer
+     last_sleep = millis();
+ 
++    // any key press dismisses a lingering ask error from the status bar
++    if (pressed && askclaude_status() == ASK_ERROR)
++        askclaude_clear_error();
++
+     //
+     JsonDocument &app = status();
+ 
+@@ -486,14 +659,72 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -185,19 +351,23 @@ index bade544..b6788a7 100644
 +            // Save before leaving the current text
              Editor::getInstance().saveFile();
  
-+            // ESC from the scratchpad returns to the file the writer was
-+            // in, not to the menu
-+            if (scratch_prev_index >= 0)
+-            //
+-            app["screen"] = MENUSCREEN;
++            // ESC from an overlay (scratchpad / ask screen) returns to the
++            // file the writer was in, not to the menu
++            if (overlay_prev_index >= 0)
 +            {
-+                int fileIndex = scratch_prev_index;
-+                scratch_prev_index = -1;
-+
++                int fileIndex = overlay_prev_index;
++                overlay_prev_index = -1;
+ 
+-            //
+-            _debug("WP_keyboard::Moving to Menu Screen\n");
 +                app["config"]["file_index"] = fileIndex;
 +                config_save();
 +
 +                Editor::getInstance().loadFile(format("/%d.txt", fileIndex));
 +
-+                _debug("WP_keyboard::Closing scratchpad, back to file %d\n", fileIndex);
++                _debug("WP_keyboard::Closing overlay, back to file %d\n", fileIndex);
 +            }
 +            else
 +            {
@@ -213,41 +383,60 @@ index bade544..b6788a7 100644
 +    // Ctrl+Shift+N: open the to-do scratchpad
 +    else if (key == KEY_SCRATCHPAD)
 +    {
-+        if (!pressed && scratch_prev_index < 0)
++        if (!pressed && app["config"]["file_index"].as<int>() != SCRATCH_FILE_INDEX)
 +        {
 +            _log("Scratchpad opened\n");
++            WP_openOverlay(SCRATCH_FILE_INDEX);
++        }
++    }
 +
-             //
--            app["screen"] = MENUSCREEN;
-+            Editor::getInstance().saveFile();
- 
-             //
--            _debug("WP_keyboard::Moving to Menu Screen\n");
-+            scratch_prev_index = app["config"]["file_index"].as<int>();
-+            app["config"]["file_index"] = SCRATCH_FILE_INDEX;
-+            config_save();
++    // Ctrl+Shift+C: open the Ask Claude screen
++    else if (key == KEY_ASK_CLAUDE)
++    {
++        if (!pressed && app["config"]["file_index"].as<int>() != ASK_FILE_INDEX)
++        {
++            _log("Ask Claude opened\n");
++            WP_openOverlay(ASK_FILE_INDEX);
++        }
++    }
 +
-+            //
-+            Editor::getInstance().loadFile(format("/%d.txt", SCRATCH_FILE_INDEX));
++    // Shift+Enter: send the prompt on the ask screen; a plain newline
++    // everywhere else
++    else if (key == KEY_ASK_SEND)
++    {
++        if (app["config"]["file_index"].as<int>() == ASK_FILE_INDEX)
++        {
++            if (!pressed)
++            {
++                // save first so the question survives even if the request
++                // dies mid-flight
++                Editor::getInstance().saveFile();
++                askclaude_request();
++            }
++        }
++        else
++        {
++            // forward press and release so auto-repeat state stays sane
++            Editor::getInstance().keyboard('\n', pressed);
          }
      }
  
-@@ -505,6 +632,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +736,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
-+            // switching files directly leaves the scratchpad - ESC should
++            // switching files directly leaves any overlay - ESC should
 +            // then open the menu as usual, not jump back
-+            scratch_prev_index = -1;
++            overlay_prev_index = -1;
 +
              //
              Editor::getInstance().saveFile();
  
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
-index 718c49d..ec9cfc3 100644
+index 718c49d..86b69c0 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
-@@ -30,9 +30,14 @@ void WP_render_cursor(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -30,9 +30,15 @@ void WP_render_cursor(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  
  //
  
@@ -255,16 +444,17 @@ index 718c49d..ec9cfc3 100644
 +//
  void WP_keyboard(int key, bool pressed, int index = -1);
  
-+// Open the to-do scratchpad from another screen (Ctrl+Shift+N in the menu):
-+// swaps the configured file to the scratchpad slot and switches the screen
-+// to the word processor.
++// Open an overlay from another screen (Ctrl+Shift+N / Ctrl+Shift+C in the
++// menu): swaps the configured file to the overlay slot and switches the
++// screen to the word processor.
 +void WP_requestScratchpad();
++void WP_requestAskClaude();
 +
  //
  String formatNumberWithCommas(long num);
  
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
-index dc0b18b..dff5031 100644
+index dc0b18b..f2edd94 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
 @@ -13,6 +13,9 @@ const ST73xxPins PINS{PIN_DC, PIN_CS, PIN_SCLK, PIN_MOSI, PIN_RST};
@@ -277,17 +467,23 @@ index dc0b18b..dff5031 100644
  // screens
  #include "ErrorScreen/ErrorScreen.h"
  #include "WordProcessor/WordProcessor.h"
-@@ -176,6 +179,16 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
+@@ -176,6 +179,22 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
    JsonDocument &app = status();
    int screen = app["screen"].as<int>();
  
-+  // Ctrl+Shift+N opens the to-do scratchpad from the menu as well.
-+  // (In the word processor WP_keyboard handles the key itself; screens
-+  // that pass keys elsewhere - keyboard mode, updater - are left alone.)
-+  if (key == KEY_SCRATCHPAD && screen == MENUSCREEN)
++  // Ctrl+Shift+N (to-do) and Ctrl+Shift+C (Ask Claude) open their overlays
++  // from the menu as well. (In the word processor WP_keyboard handles the
++  // keys itself; screens that pass keys elsewhere - keyboard mode,
++  // updater - are left alone.)
++  if ((key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE) && screen == MENUSCREEN)
 +  {
 +    if (!pressed)
-+      WP_requestScratchpad();
++    {
++      if (key == KEY_SCRATCHPAD)
++        WP_requestScratchpad();
++      else
++        WP_requestAskClaude();
++    }
 +    return;
 +  }
 +
@@ -295,7 +491,7 @@ index dc0b18b..dff5031 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..e63342e 100644
+index d8832fa..7816a56 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -369,7 +565,7 @@ index d8832fa..e63342e 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,61 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,75 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -386,6 +582,12 @@ index d8832fa..e63342e 100644
 +
 +        if (letter == 'a')
 +            return KEY_SELECT_ALL;
++#ifdef REV8
++        // Ctrl/GUI + Shift + C opens the Ask Claude screen (checked before
++        // the plain-copy mapping; copy stays on Ctrl+C without shift)
++        if (letter == 'c' && _shift_pressed)
++            return KEY_ASK_CLAUDE;
++#endif
 +        if (letter == 'c')
 +            return KEY_COPY;
 +        if (letter == 'x')
@@ -428,10 +630,18 @@ index d8832fa..e63342e 100644
 +            return KEY_DOC_END;
 +    }
 +
++#ifdef REV8
++    // Shift+Enter submits the Ask Claude prompt. Outside the ask screen
++    // the word processor forwards it back to the editor as a plain
++    // newline, so Shift+Enter still types a line break while writing.
++    if (key == '\n' && _shift_pressed)
++        return KEY_ASK_SEND;
++#endif
++
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +360,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +374,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -544,8 +754,412 @@ index aa3d65d..b33d4f7 100644
          else if (key == "FILE0")
              return 1000;
  
+diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
+new file mode 100644
+index 0000000..8f4d207
+--- /dev/null
++++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
+@@ -0,0 +1,357 @@
++#include "AskClaude.h"
++#include "app/app.h"
++
++//
++#include "service/Editor/Editor.h"
++
++//
++#include <WiFi.h>
++#include <HTTPClient.h>
++
++// state shared between the display core (request/poll) and the background
++// core (worker). The int is written by one side at a time; String fields
++// are only touched while the state machine guarantees the other side
++// isn't reading them (snapshot before BUSY, answer after BUSY).
++static volatile int _state = ASK_IDLE;
++static String _status_text = "";
++static String _prompt = ""; // buffer snapshot taken at request time
++static String _answer = "";
++static volatile bool _answer_ready = false;
++
++// /claude.json
++static String _api_key = "";
++static String _model = "claude-opus-4-8";
++static int _max_tokens = 1024;
++static String _system = "";
++
++//
++int askclaude_status() { return _state; }
++const char *askclaude_status_text() { return _status_text.c_str(); }
++void askclaude_clear_error()
++{
++    if (_state == ASK_ERROR)
++        _state = ASK_IDLE;
++}
++bool askclaude_answer_ready() { return _answer_ready; }
++String askclaude_take_answer()
++{
++    _answer_ready = false;
++    return _answer;
++}
++
++//
++static void ask_fail(const char *message)
++{
++    _status_text = message;
++    _state = ASK_ERROR;
++    _log("[askclaude] error: %s\n", message);
++}
++
++// load /claude.json from the drive
++static bool ask_load_config()
++{
++    if (!gfs()->exists("/claude.json"))
++    {
++        ask_fail("NO claude.json");
++        return false;
++    }
++
++    File file = gfs()->open("/claude.json", "r");
++    if (!file)
++    {
++        ask_fail("claude.json OPEN FAIL");
++        return false;
++    }
++
++    JsonDocument doc;
++    DeserializationError err = deserializeJson(doc, file);
++    file.close();
++
++    if (err)
++    {
++        ask_fail("claude.json BAD JSON");
++        return false;
++    }
++
++    _api_key = doc["api_key"] | "";
++    _model = doc["model"] | "claude-opus-4-8";
++    _max_tokens = doc["max_tokens"] | 1024;
++    _system = doc["system"] | "";
++
++    if (_api_key.length() < 10)
++    {
++        ask_fail("NO API KEY");
++        return false;
++    }
++
++    return true;
++}
++
++// Split the buffer snapshot into conversation turns. Blocks separated by
++// lines containing exactly "---" alternate user / assistant / user...
++// Returns false (with an error set) when there is nothing to ask.
++static bool ask_build_messages(JsonArray messages)
++{
++    int start = 0;
++    int length = _prompt.length();
++    String block = "";
++    int role = 0; // 0 = user, 1 = assistant
++
++    auto flushBlock = [&]() {
++        block.trim();
++        if (block.length() > 0)
++        {
++            JsonObject msg = messages.add<JsonObject>();
++            msg["role"] = role == 0 ? "user" : "assistant";
++            msg["content"] = block;
++            role = 1 - role;
++        }
++        block = "";
++    };
++
++    while (start <= length)
++    {
++        int nl = _prompt.indexOf('\n', start);
++        String line = (nl < 0) ? _prompt.substring(start)
++                               : _prompt.substring(start, nl);
++
++        String trimmed = line;
++        trimmed.trim();
++
++        if (trimmed == "---")
++            flushBlock();
++        else
++        {
++            block += line;
++            block += '\n';
++        }
++
++        if (nl < 0)
++            break;
++        start = nl + 1;
++    }
++    flushBlock();
++
++    if (messages.size() == 0)
++    {
++        ask_fail("NOTHING TO ASK");
++        return false;
++    }
++
++    // the API requires the conversation to end on a user turn - hitting
++    // send right after an answer (without typing a new question) would
++    // otherwise be rejected as a prefill
++    JsonObject last = messages[messages.size() - 1];
++    if (strcmp(last["role"], "user") != 0)
++    {
++        ask_fail("TYPE A QUESTION FIRST");
++        return false;
++    }
++
++    return true;
++}
++
++// connect to a saved WiFi network - same scan-and-match approach as Sync,
++// without the sync screen messaging
++static bool ask_connect_wifi()
++{
++    JsonDocument &app = status();
++
++    setCpuFrequencyMhz(CPU_FREQUENCY_FULL);
++
++    WiFi.mode(WIFI_STA);
++    WiFi.setHostname("MICROJOURNAL");
++    delay(1000);
++
++    int networksFound = WiFi.scanNetworks();
++    _log("[askclaude] found %d networks\n", networksFound);
++
++    JsonArray savedAccessPoints = app["wifi"]["access_points"].as<JsonArray>();
++
++    for (int i = 0; i < networksFound; i++)
++    {
++        String availableSsid = WiFi.SSID(i);
++
++        for (JsonVariant savedAccessPoint : savedAccessPoints)
++        {
++            const char *savedSsid = savedAccessPoint["ssid"];
++            const char *savedPassword = savedAccessPoint["password"];
++
++            if (savedSsid == nullptr ||
++                strcmp(availableSsid.c_str(), savedSsid) != 0)
++                continue;
++
++            _log("[askclaude] connecting to %s\n", savedSsid);
++            WiFi.begin(savedSsid, savedPassword);
++
++            int attempt = 0;
++            while (WiFi.status() != WL_CONNECTED && attempt < 100)
++            {
++                delay(100);
++                attempt++;
++            }
++
++            if (WiFi.status() == WL_CONNECTED)
++            {
++                _log("[askclaude] connected: %s\n",
++                     WiFi.localIP().toString().c_str());
++                return true;
++            }
++
++            // try the remaining saved networks
++            WiFi.disconnect();
++        }
++    }
++
++    return false;
++}
++
++// power the radio down again (same as sync_stop)
++static void ask_wifi_off()
++{
++    WiFi.disconnect(true);
++    WiFi.mode(WIFI_OFF);
++    setCpuFrequencyMhz(CPU_FREQUENCY_LOW);
++}
++
++// the blocking worker - runs on the background core
++static void ask_run()
++{
++    _status_text = "ASKING (WIFI)...";
++
++    if (!ask_load_config())
++        return;
++
++    // build the request body first - cheap, and fails fast on an
++    // empty prompt without touching the radio
++    JsonDocument requestDoc;
++    requestDoc["model"] = _model;
++    requestDoc["max_tokens"] = _max_tokens;
++    if (_system.length() > 0)
++        requestDoc["system"] = _system;
++    JsonArray messages = requestDoc["messages"].to<JsonArray>();
++    if (!ask_build_messages(messages))
++        return;
++
++    String body;
++    serializeJson(requestDoc, body);
++    requestDoc.clear();
++
++    //
++    if (!ask_connect_wifi())
++    {
++        ask_wifi_off();
++        ask_fail("NO WIFI");
++        return;
++    }
++
++    _status_text = "ASKING...";
++
++    // the HTTPS request. HTTPClient::begin(url) with an https URL uses
++    // TLS without certificate pinning - same approach the Sync service
++    // uses for Google Drive.
++    HTTPClient http;
++    http.begin("https://api.anthropic.com/v1/messages");
++    http.setConnectTimeout(15000);
++    http.setTimeout(60000); // Opus without thinking usually answers well within this
++    http.addHeader("Content-Type", "application/json");
++    http.addHeader("x-api-key", _api_key);
++    http.addHeader("anthropic-version", "2023-06-01");
++
++    int code = http.POST(body);
++    String response = (code > 0) ? http.getString() : "";
++    http.end();
++    ask_wifi_off();
++
++    _log("[askclaude] HTTP %d, %d bytes\n", code, response.length());
++
++    if (code <= 0)
++    {
++        ask_fail("CONNECTION FAILED");
++        return;
++    }
++
++    JsonDocument responseDoc;
++    if (deserializeJson(responseDoc, response))
++    {
++        ask_fail(format("HTTP %d (BAD JSON)", code).c_str());
++        return;
++    }
++
++    if (code != 200)
++    {
++        // surface the API's error type (e.g. authentication_error)
++        const char *type = responseDoc["error"]["type"] | "";
++        String msg = format("HTTP %d %s", code, type);
++        ask_fail(msg.c_str());
++        return;
++    }
++
++    // a refusal returns 200 with no usable text
++    const char *stopReason = responseDoc["stop_reason"] | "";
++    if (strcmp(stopReason, "refusal") == 0)
++    {
++        ask_fail("REFUSED");
++        return;
++    }
++
++    // collect the text blocks
++    String answer = "";
++    for (JsonVariant blockVar : responseDoc["content"].as<JsonArray>())
++    {
++        const char *type = blockVar["type"] | "";
++        if (strcmp(type, "text") == 0)
++            answer += blockVar["text"] | "";
++    }
++
++    if (answer.length() == 0)
++    {
++        ask_fail("EMPTY ANSWER");
++        return;
++    }
++
++    if (strcmp(stopReason, "max_tokens") == 0)
++        answer += "\n[cut off - raise max_tokens in claude.json]";
++
++    _answer = answer;
++    _answer_ready = true;
++    _status_text = "";
++    _state = ASK_IDLE;
++}
++
++// display side: snapshot the buffer and hand the work to the background core
++void askclaude_request()
++{
++    if (_state == ASK_BUSY)
++        return;
++
++    // snapshot now so typing during the request can't tear the prompt
++    _prompt = Editor::getInstance().buffer;
++    _answer_ready = false;
++    _status_text = "ASKING...";
++    _state = ASK_BUSY;
++
++    JsonDocument &app = status();
++    app["task"] = "ask_claude";
++
++    _log("[askclaude] request queued (%d bytes)\n", _prompt.length());
++}
++
++// background core: pick up the queued request (same pattern as sync_loop)
++void askclaude_loop()
++{
++    static unsigned int last = 0;
++    if (millis() - last > 500)
++    {
++        last = millis();
++
++        JsonDocument &app = status();
++        String task = app["task"].as<String>();
++
++        if (task == "ask_claude")
++        {
++            app["task"] = "";
++            ask_run();
++        }
++    }
++}
+diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
+new file mode 100644
+index 0000000..69f44c4
+--- /dev/null
++++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
+@@ -0,0 +1,35 @@
++#pragma once
++
++#include <Arduino.h>
++
++// Ask Claude: send the current editor buffer (the "/11.txt" ask screen) as
++// a conversation to the Anthropic API and append the answer to the buffer.
++//
++// The request runs on the background core via the app["task"] mechanism
++// (same as Sync), so typing and the display stay responsive. The display
++// side polls askclaude_answer_ready() and injects the answer into the
++// editor buffer on its own core.
++//
++// Configuration lives in /claude.json on the drive:
++//   { "api_key": "sk-ant-...", "model": "claude-opus-4-8",
++//     "max_tokens": 1024, "system": "..." }
++//
++// The conversation format inside the buffer: blocks separated by lines
++// containing exactly "---" alternate between user and assistant, starting
++// with user. Everything in the buffer is sent, so follow-up questions
++// carry their context.
++
++#define ASK_IDLE 0
++#define ASK_BUSY 1
++#define ASK_ERROR 2
++
++// display side
++void askclaude_request();             // snapshot the buffer and queue a request
++int askclaude_status();               // ASK_IDLE / ASK_BUSY / ASK_ERROR
++const char *askclaude_status_text();  // short text for the status bar
++void askclaude_clear_error();         // dismiss an error state
++bool askclaude_answer_ready();        // a finished answer is waiting
++String askclaude_take_answer();       // consume the pending answer
++
++// background core (called from app_loop)
++void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..58c1de3 100644
+index 45f7e4a..d2cdb70 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -155,6 +155,9 @@ void Editor::loadFile(String fileName)
@@ -665,20 +1279,21 @@ index 45f7e4a..58c1de3 100644
          pageChanged = true;
      }
      else
-@@ -716,8 +798,10 @@ void Editor::keyboard(int key, bool pressed)
+@@ -716,8 +798,11 @@ void Editor::keyboard(int key, bool pressed)
  {
      // ignore non printable character
      // (1 is the "consumed" sentinel from the keyboard locale layer,
 -    // e.g. the Hangul/English toggle key which must type nothing)
 -    if (key == 0 || key == 1 || key == 27 || key == MENU)
 +    // e.g. the Hangul/English toggle key which must type nothing.
-+    // KEY_SCRATCHPAD belongs to the display layer - displays that don't
-+    // implement the scratchpad must not type it as a character)
-+    if (key == 0 || key == 1 || key == 27 || key == MENU || key == KEY_SCRATCHPAD)
++    // KEY_SCRATCHPAD/KEY_ASK_* belong to the display layer - displays that
++    // don't implement them must not type them as characters)
++    if (key == 0 || key == 1 || key == 27 || key == MENU ||
++        key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE || key == KEY_ASK_SEND)
          return;
  
      //
-@@ -750,11 +834,85 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +835,85 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -764,7 +1379,7 @@ index 45f7e4a..58c1de3 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +956,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +957,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -779,7 +1394,7 @@ index 45f7e4a..58c1de3 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +999,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1000,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -791,7 +1406,7 @@ index 45f7e4a..58c1de3 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1012,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1013,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -805,7 +1420,7 @@ index 45f7e4a..58c1de3 100644
                  }
                  else
                  {
-@@ -858,7 +1030,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1031,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -814,7 +1429,7 @@ index 45f7e4a..58c1de3 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1042,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1043,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -824,7 +1439,7 @@ index 45f7e4a..58c1de3 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1115,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1116,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -834,7 +1449,7 @@ index 45f7e4a..58c1de3 100644
                      }
                      else
                      {
-@@ -1025,11 +1199,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1200,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -937,7 +1552,7 @@ index 45f7e4a..58c1de3 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1348,6 +1613,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1614,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1064,10 +1679,10 @@ index 45f7e4a..58c1de3 100644
  {
      int length = getBufferSize();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..8dc15ec 100644
+index 15a36fe..1ef35eb 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,56 @@
+@@ -16,6 +16,62 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -1115,6 +1730,12 @@ index 15a36fe..8dc15ec 100644
 +// never by the editor - it swaps the loaded file, ESC swaps back)
 +#define KEY_SCRATCHPAD 2120
 +
++// Ask Claude (Rev 8): Ctrl+Shift+C opens the ask screen, Shift+Enter
++// sends the prompt. Both handled by the display layer; outside the ask
++// screen the display forwards KEY_ASK_SEND back as a plain newline.
++#define KEY_ASK_CLAUDE 2121
++#define KEY_ASK_SEND 2122
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -1124,7 +1745,7 @@ index 15a36fe..8dc15ec 100644
  //
  class Editor
  {
-@@ -117,6 +167,11 @@ public:
+@@ -117,6 +173,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -1136,7 +1757,7 @@ index 15a36fe..8dc15ec 100644
      //
      bool savingInProgress = false;
  
-@@ -144,12 +199,53 @@ public:
+@@ -144,12 +205,53 @@ public:
      HangulComposer composer;
      void replaceCharBeforeCursor(uint32_t codepoint);
  

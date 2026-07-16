@@ -33,6 +33,22 @@ on the drive as `10.txt` (visible in Drive Mode, included in sync), and
 Fn+0–9 can't reach it. Switching files with Fn+number while in the
 scratchpad leaves it like any other file.
 
+**Ask Claude** — Ctrl+Shift+C opens the ask screen (hidden file slot 11,
+status bar shows `ASK`). Type a question, press **Shift+Enter** to send it
+to the Anthropic API over WiFi; the status bar shows `ASKING...` and the
+answer is appended below a `---` separator (typing stays live during the
+request — it runs on the second core). Everything in the file is sent as
+conversation context, with `---` lines separating user/assistant turns —
+so follow-ups just work; select-all + delete starts a fresh conversation.
+ESC returns to your writing.
+
+Requires: `wifi.json` (the device's normal WiFi setup) and `claude.json`
+in the drive root — `{"api_key": "sk-ant-...", "model": "claude-opus-4-8",
+"max_tokens": 1024, "system": "..."}`. `claude.json` holds a real API key
+and is deliberately **not** in this repo (see `.gitignore`). Errors (no
+WiFi, bad key, refusal) show in the status bar and clear on the next
+keypress.
+
 Typing replaces the selection; Backspace/DEL delete it; plain movement
 drops it.
 
