@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..6fcea89 100644
+index bade544..932dc6e 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -92,7 +92,7 @@ index bade544..6fcea89 100644
  
  //
  int STATUSBAR_Y = 295;
-@@ -44,6 +45,77 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+@@ -44,6 +45,78 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
  // active font, selected in WP_setup from config "font"
  static EditorFont *wp_font = &WP_FONTS[0];
  
@@ -163,6 +163,7 @@ index bade544..6fcea89 100644
 +
 +    editor.cursorPos = editor.getBufferSize();
 +    editor.saved = false;
++    editor.markDirty(); // the injected answer becomes its own undo step
 +    editor.pageChanged = true; // full redraw
 +    editor.updateScreen();
 +}
@@ -170,7 +171,7 @@ index bade544..6fcea89 100644
  // layout derived from the active font metrics in WP_setup
  static int editY = 264;   // baseline of the edit line
  static int cursorY = 270; // top of the cursor band under the edit line
-@@ -91,6 +163,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -91,6 +164,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -181,7 +182,7 @@ index bade544..6fcea89 100644
      // load file from the editor
      int file_index = app["config"]["file_index"].as<int>();
      Editor::getInstance().loadFile(format("/%d.txt", file_index));
-@@ -119,6 +195,25 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -119,6 +196,25 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // timers
      WP_check_saved();
  
@@ -207,7 +208,7 @@ index bade544..6fcea89 100644
      // CLEAR BACKGROUND
      WP_render_clear(display, u8);
  
-@@ -161,6 +256,8 @@ bool WP_contentChanged()
+@@ -161,6 +257,8 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
@@ -216,7 +217,7 @@ index bade544..6fcea89 100644
  
      JsonDocument &app = status();
  
-@@ -170,6 +267,7 @@ bool WP_contentChanged()
+@@ -170,6 +268,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -224,7 +225,7 @@ index bade544..6fcea89 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,7 +278,9 @@ bool WP_contentChanged()
+@@ -180,7 +279,9 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
@@ -235,7 +236,7 @@ index bade544..6fcea89 100644
  
      cursorPos_prev = cursorPos;
      cursorLinePos_prev = cursorLinePos;
-@@ -188,7 +288,9 @@ bool WP_contentChanged()
+@@ -188,7 +289,9 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
@@ -245,7 +246,7 @@ index bade544..6fcea89 100644
  
      return changed;
  }
-@@ -244,6 +346,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +347,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -260,7 +261,7 @@ index bade544..6fcea89 100644
      //
      JsonDocument &app = status();
  
-@@ -306,19 +416,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -306,19 +417,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  //
  void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
  {
@@ -327,7 +328,7 @@ index bade544..6fcea89 100644
  }
  
  //
-@@ -382,11 +537,17 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +538,17 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -347,7 +348,7 @@ index bade544..6fcea89 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +564,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +565,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -356,7 +357,7 @@ index bade544..6fcea89 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +576,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +577,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -371,7 +372,7 @@ index bade544..6fcea89 100644
  }
  
  //
-@@ -478,6 +647,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +648,10 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -382,7 +383,7 @@ index bade544..6fcea89 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +659,72 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +660,72 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -460,7 +461,7 @@ index bade544..6fcea89 100644
          }
      }
  
-@@ -505,6 +736,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +737,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -1236,7 +1237,7 @@ index 0000000..69f44c4
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..c200c10 100644
+index 45f7e4a..43554d7 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
@@ -1418,7 +1419,7 @@ index 45f7e4a..c200c10 100644
          return;
  
      //
-@@ -750,11 +854,120 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +854,124 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -1426,15 +1427,19 @@ index 45f7e4a..c200c10 100644
 +        // UNDO / REDO
 +        //////////////////////////
 +        // handled here (not a buffer mutation), before the selection/edit
-+        // branches, so they can't misread the code
++        // branches, so they can't misread the code. lastKey is cleared so
++        // holding the combo doesn't auto-repeat - with a 10-step history a
++        // held Ctrl+Z would otherwise wipe it in under a second.
 +        if (key == KEY_UNDO)
 +        {
++            lastKey = 0;
 +            composer.reset();
 +            undo();
 +            return;
 +        }
 +        if (key == KEY_REDO)
 +        {
++            lastKey = 0;
 +            composer.reset();
 +            redo();
 +            return;
@@ -1540,7 +1545,7 @@ index 45f7e4a..c200c10 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +1011,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +1015,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -1555,7 +1560,7 @@ index 45f7e4a..c200c10 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +1054,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1058,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -1567,7 +1572,7 @@ index 45f7e4a..c200c10 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1067,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1071,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -1581,7 +1586,7 @@ index 45f7e4a..c200c10 100644
                  }
                  else
                  {
-@@ -858,7 +1085,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1089,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -1590,7 +1595,7 @@ index 45f7e4a..c200c10 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1097,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1101,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -1600,7 +1605,7 @@ index 45f7e4a..c200c10 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1170,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1174,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -1610,7 +1615,7 @@ index 45f7e4a..c200c10 100644
                      }
                      else
                      {
-@@ -1025,11 +1254,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1258,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -1713,7 +1718,7 @@ index 45f7e4a..c200c10 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1284,6 +1604,7 @@ void Editor::addChar(int c)
+@@ -1284,6 +1608,7 @@ void Editor::addChar(int c)
          cursorPos += len;
          buffer[bufferSize + len] = '\0';
  
@@ -1721,7 +1726,7 @@ index 45f7e4a..c200c10 100644
          _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
      }
  }
-@@ -1311,6 +1632,7 @@ void Editor::removeLastChar()
+@@ -1311,6 +1636,7 @@ void Editor::removeLastChar()
          buffer[bufferSize - len] = 0;
          cursorPos = start;
  
@@ -1729,7 +1734,7 @@ index 45f7e4a..c200c10 100644
          bufferSize = getBufferSize();
          _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
      }
-@@ -1333,6 +1655,7 @@ void Editor::removeCharAtCursor()
+@@ -1333,6 +1659,7 @@ void Editor::removeCharAtCursor()
  
          // Null terminate the buffer
          buffer[bufferSize - len] = '\0';
@@ -1737,7 +1742,7 @@ index 45f7e4a..c200c10 100644
      }
  }
  
-@@ -1348,6 +1671,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1675,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1865,7 +1870,7 @@ index 45f7e4a..c200c10 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1378,6 +1822,224 @@ void Editor::removeLastWord()
+@@ -1378,6 +1826,224 @@ void Editor::removeLastWord()
  
      cursorPos = getBufferSize();
  
