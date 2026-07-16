@@ -756,15 +756,16 @@ index aa3d65d..b33d4f7 100644
  
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 new file mode 100644
-index 0000000..8f4d207
+index 0000000..b157bfc
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,378 @@
 +#include "AskClaude.h"
 +#include "app/app.h"
 +
 +//
 +#include "service/Editor/Editor.h"
++#include "service/WifiEntry/WifiEntry.h"
 +
 +//
 +#include <WiFi.h>
@@ -919,16 +920,34 @@ index 0000000..8f4d207
 +{
 +    JsonDocument &app = status();
 +
++    // wifi.json is NOT loaded at boot - the sync/wifi menu screens load it
++    // on entry. Load it here so Ask Claude works without visiting a menu.
++    wifi_config_load();
++
++    JsonArray savedAccessPoints = app["wifi"]["access_points"].as<JsonArray>();
++    if (savedAccessPoints.isNull() || savedAccessPoints.size() == 0)
++    {
++        ask_fail("NO WIFI CONFIG");
++        return false;
++    }
++
 +    setCpuFrequencyMhz(CPU_FREQUENCY_FULL);
 +
 +    WiFi.mode(WIFI_STA);
 +    WiFi.setHostname("MICROJOURNAL");
-+    delay(1000);
++
++    // give the radio time to come up before scanning (same wait Sync uses -
++    // scanning too early returns an empty list)
++    delay(3000);
 +
 +    int networksFound = WiFi.scanNetworks();
++    if (networksFound <= 0)
++    {
++        // one retry - first scan after power-up occasionally comes back empty
++        delay(1000);
++        networksFound = WiFi.scanNetworks();
++    }
 +    _log("[askclaude] found %d networks\n", networksFound);
-+
-+    JsonArray savedAccessPoints = app["wifi"]["access_points"].as<JsonArray>();
 +
 +    for (int i = 0; i < networksFound; i++)
 +    {
@@ -1003,7 +1022,9 @@ index 0000000..8f4d207
 +    if (!ask_connect_wifi())
 +    {
 +        ask_wifi_off();
-+        ask_fail("NO WIFI");
++        // keep a more specific error (NO WIFI CONFIG) if one was already set
++        if (_state != ASK_ERROR)
++            ask_fail("NO WIFI");
 +        return;
 +    }
 +
