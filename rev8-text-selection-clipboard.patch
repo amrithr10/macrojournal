@@ -1,0 +1,1001 @@
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
+index bade544..55c90d9 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
+@@ -91,6 +91,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     // editor instantiate
+     Editor::getInstance().init(cols, rows, wp_font);
+ 
++    // this display renders the selection (inverse video), so enable
++    // Shift+arrow selection and the clipboard keys in the editor
++    Editor::getInstance().selectionSupported = true;
++
+     // load file from the editor
+     int file_index = app["config"]["file_index"].as<int>();
+     Editor::getInstance().loadFile(format("/%d.txt", file_index));
+@@ -161,6 +165,7 @@ bool WP_contentChanged()
+     static int wordCount_prev = -1;
+     static int file_index_prev = -1;
+     static int blinkPhase_prev = -1;
++    static int selectAnchor_prev = -1;
+ 
+     JsonDocument &app = status();
+ 
+@@ -170,6 +175,7 @@ bool WP_contentChanged()
+     bool saved = Editor::getInstance().saved;
+     int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
+     int file_index = app["config"]["file_index"].as<int>();
++    int selectAnchor = Editor::getInstance().selectAnchor;
+     // flips every 500ms, matching WP_render_cursor()'s blink rate
+     int blinkPhase = (millis() / 500) % 2;
+ 
+@@ -180,6 +186,7 @@ bool WP_contentChanged()
+                    saved != saved_prev ||
+                    wordCount != wordCount_prev ||
+                    file_index != file_index_prev ||
++                   selectAnchor != selectAnchor_prev ||
+                    blinkPhase != blinkPhase_prev;
+ 
+     cursorPos_prev = cursorPos;
+@@ -188,6 +195,7 @@ bool WP_contentChanged()
+     saved_prev = saved;
+     wordCount_prev = wordCount;
+     file_index_prev = file_index;
++    selectAnchor_prev = selectAnchor;
+     blinkPhase_prev = blinkPhase;
+ 
+     return changed;
+@@ -244,6 +252,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+         clear_background = true;
+     }
+ 
++    // the selection changed (extended, cleared, deleted) - the highlight
++    // can span any line, so repaint fully
++    if (Editor::getInstance().selectionChanged)
++    {
++        Editor::getInstance().selectionChanged = false;
++        clear_background = true;
++    }
++
+     //
+     JsonDocument &app = status();
+ 
+@@ -306,19 +322,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ //
+ void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
+ {
+-    char *line = Editor::getInstance().linePositions[line_num];
+-    int length = Editor::getInstance().lineLengths[line_num];
++    Editor &editor = Editor::getInstance();
++    char *line = editor.linePositions[line_num];
++    int length = editor.lineLengths[line_num];
++
++    // byte range of the selection so selected characters render in inverse
++    // video. Selection bounds always sit on character boundaries, so the
++    // color switch below never lands inside a multi-byte sequence.
++    int selStart = -1, selEnd = -1;
++    if (editor.hasSelection())
++    {
++        selStart = editor.selectionStart();
++        selEnd = editor.selectionEnd();
++    }
++    int lineStart = line - editor.buffer;
+ 
+     // render - the buffer holds UTF-8 and the u8g2 print pipeline decodes
+     // multi-byte characters itself, so bytes stream straight through
++    bool inverse = false;
+     for (int i = 0; i < length; i++)
+     {
+         char value = *(line + i);
+         if (value == '\n')
+             continue;
+ 
++        bool selected = selStart >= 0 &&
++                        lineStart + i >= selStart &&
++                        lineStart + i < selEnd;
++        if (selected != inverse)
++        {
++            if (selected)
++            {
++                // inverse video: mode 0 paints the glyph background box
++                u8->setFontMode(0);
++                u8->setForegroundColor(0);
++                u8->setBackgroundColor(1);
++            }
++            else
++            {
++                u8->setFontMode(1);
++                u8->setForegroundColor(1);
++                u8->setBackgroundColor(0);
++            }
++            inverse = selected;
++        }
++
+         u8->print(value);
+     }
++
++    // restore normal drawing state for the next line / status bar.
++    // bg must go back to 0: setFont() re-enables background drawing on
++    // every font change, so a leftover bg of 1 would paint black boxes
++    // behind all text drawn afterwards.
++    if (inverse)
++    {
++        u8->setFontMode(1);
++        u8->setForegroundColor(1);
++        u8->setBackgroundColor(0);
++    }
+ }
+ 
+ //
+diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
+index d8832fa..580b3ba 100644
+--- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
++++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
+@@ -11,6 +11,9 @@
+ #include "keyboard/Locale/locale.h"
+ #include "keyboard/Locale/ko/ko.h"
+ 
++// selection / clipboard key codes
++#include "service/Editor/Editor.h"
++
+ //
+ #define LAYERS 4 // layers
+ #define COLS 9   // columns
+@@ -39,15 +42,16 @@ int layers[LAYERS][ROWS * COLS] = {
+      ' ', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 22,
+      0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '\\', 23,
+      14, '`', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 14, 20, 3,
+-     0, 0, 17, ' ', 17, 17, 2, 18, 21, 19,
++     KEY_MOD_CTRL, KEY_MOD_GUI, 17, ' ', 17, 17, 2, 18, 21, 19,
+      MENU},
+ 
+     {// when shift is pressed
++     // Shift+arrow selects text instead of just moving the cursor
+      27, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '\b', 127,
+      ' ', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 22,
+      0, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '|', 23,
+-     14, '~', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 14, 20, 3,
+-     0, 0, 17, ' ', 17, 17, 2, 18, 21, 19,
++     14, '~', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 14, KEY_SELECT_UP, KEY_SELECT_END,
++     KEY_MOD_CTRL, KEY_MOD_GUI, 17, ' ', 17, 17, KEY_SELECT_HOME, KEY_SELECT_LEFT, KEY_SELECT_DOWN, KEY_SELECT_RIGHT,
+      MENU},
+ 
+     {// alt layer
+@@ -55,15 +59,15 @@ int layers[LAYERS][ROWS * COLS] = {
+      ' ', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 22,
+      0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '\\', 23,
+      14, '`', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 14, 20, 3,
+-     0, 0, 17, ' ', 17, 17, 2, 18, 21, 19,
++     KEY_MOD_CTRL, KEY_MOD_GUI, 17, ' ', 17, 17, 2, 18, 21, 19,
+      MENU},
+ 
+     {// alt layer shift
+      27, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1000, '-', '=', '\b', 127,
+      ' ', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 22,
+      0, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '|', 23,
+-     14, '~', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 14, 20, 3,
+-     0, 0, 17, ' ', 17, 17, 2, 18, 21, 19,
++     14, '~', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 14, KEY_SELECT_UP, KEY_SELECT_END,
++     KEY_MOD_CTRL, KEY_MOD_GUI, 17, ' ', 17, 17, KEY_SELECT_HOME, KEY_SELECT_LEFT, KEY_SELECT_DOWN, KEY_SELECT_RIGHT,
+      MENU},
+ 
+ };
+@@ -215,6 +219,9 @@ void keyboard_keypad_68_loop()
+ int _layer = 0;
+ bool _shift_pressed = false;
+ bool _fn_pressed = false;
++// physical LEFT_CTRL / LEFT_GUI: both act as the clipboard modifier
++// (Ctrl/GUI + A/C/X/V = select all / copy / cut / paste)
++bool _ctrl_pressed = false;
+ //
+ int keyboard_keypad_68_get_key(keypadEvent e)
+ {
+@@ -271,6 +278,11 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+             return 0;
+         }
+     }
++    else if (key == KEY_MOD_CTRL || key == KEY_MOD_GUI)
++    {
++        _ctrl_pressed = (e.bit.EVENT == KEY_JUST_PRESSED);
++        return 0;
++    }
+ 
+     // check if the layer key is pressed
+     if (_fn_pressed)
+@@ -282,6 +294,57 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+     // value baked into the layer tables (hardcoded to the US layout)
+     key = layers[_layer][e.bit.KEY];
+ 
++    // Ctrl/GUI + A/C/X/V: select all / copy / cut / paste. Resolved before
++    // the locale remap so the shortcut letters stay Latin under every
++    // layout (e.g. Ctrl+C while Hangul input is active).
++    if (_ctrl_pressed)
++    {
++        char letter = 0;
++        if (key >= 'a' && key <= 'z')
++            letter = key;
++        else if (key >= 'A' && key <= 'Z')
++            letter = key - 'A' + 'a';
++
++        if (letter == 'a')
++            return KEY_SELECT_ALL;
++        if (letter == 'c')
++            return KEY_COPY;
++        if (letter == 'x')
++            return KEY_CUT;
++        if (letter == 'v')
++            return KEY_PASTE;
++
++        // Ctrl/GUI + Shift + arrows: upgrade the character/line select keys
++        // (from the shift layer) to word / line selection
++        if (key == KEY_SELECT_LEFT)
++            return KEY_SELECT_WORD_LEFT;
++        if (key == KEY_SELECT_RIGHT)
++            return KEY_SELECT_WORD_RIGHT;
++        if (key == KEY_SELECT_UP)
++            return KEY_SELECT_LINE_UP;
++        if (key == KEY_SELECT_DOWN)
++            return KEY_SELECT_LINE_DOWN;
++
++        // Ctrl/GUI + Shift + Home/End: jump to the start/end of the line
++        // (plain navigation - Home/End codes 2/3)
++        if (key == KEY_SELECT_HOME)
++            return 2;
++        if (key == KEY_SELECT_END)
++            return 3;
++
++        // Ctrl/GUI + Left/Right: move one word at a time
++        if (key == 18)
++            return KEY_WORD_LEFT;
++        if (key == 19)
++            return KEY_WORD_RIGHT;
++
++        // Ctrl/GUI + PgUp/PgDn: jump to the start/end of the document
++        if (key == 22)
++            return KEY_DOC_HOME;
++        if (key == 23)
++            return KEY_DOC_END;
++    }
++
+     // Korean maps by the CHARACTER the layer table produced, not by the
+     // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
+     // customized via keyboard.json keep working - the resolved character
+@@ -293,8 +356,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+     }
+ 
+     // for other non-US layouts, re-map character keys through the locale
+-    // tables instead of returning the hardcoded US character
+-    else if (use_locale)
++    // tables instead of returning the hardcoded US character.
++    // Selection/clipboard codes sit on letter keys (Fn+A/C/X/V) whose hid
++    // is non-zero - skip the remap so they survive under every layout.
++    else if (use_locale && !(key >= KEY_SELECT_LEFT && key <= KEY_SELECT_DOC_END))
+     {
+         uint8_t hid = key_hid[e.bit.KEY];
+         if (hid != 0)
+diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
+index aa3d65d..ab7fc39 100644
+--- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
++++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
+@@ -2,6 +2,9 @@
+ #include "app/app.h"
+ #include "display/display.h"
+ 
++// selection / clipboard key codes
++#include "service/Editor/Editor.h"
++
+ void keypad_load_config(String filename, int *layers, int size, const char **keys, int num_layers)
+ {
+     //
+@@ -100,6 +103,13 @@ int keypad_convert_wp_keys(String key)
+         else if (key == "SHIFT")
+             return 14;
+ 
++        // clipboard modifier (Ctrl/GUI + A/C/X/V)
++        else if (key == "CTRL" || key == "LEFT_CTRL")
++            return KEY_MOD_CTRL;
++
++        else if (key == "GUI" || key == "LEFT_GUI")
++            return KEY_MOD_GUI;
++
+         else if (key == "ALT")
+             return 17;
+ 
+@@ -133,6 +143,68 @@ int keypad_convert_wp_keys(String key)
+         else if (key == "END")
+             return 3;
+ 
++        // text selection (Shift+arrow) and clipboard
++        else if (key == "SELECT_LEFT")
++            return KEY_SELECT_LEFT;
++
++        else if (key == "SELECT_RIGHT")
++            return KEY_SELECT_RIGHT;
++
++        else if (key == "SELECT_UP")
++            return KEY_SELECT_UP;
++
++        else if (key == "SELECT_DOWN")
++            return KEY_SELECT_DOWN;
++
++        else if (key == "SELECT_ALL")
++            return KEY_SELECT_ALL;
++
++        else if (key == "COPY")
++            return KEY_COPY;
++
++        else if (key == "CUT")
++            return KEY_CUT;
++
++        else if (key == "PASTE")
++            return KEY_PASTE;
++
++        else if (key == "SELECT_WORD_LEFT")
++            return KEY_SELECT_WORD_LEFT;
++
++        else if (key == "SELECT_WORD_RIGHT")
++            return KEY_SELECT_WORD_RIGHT;
++
++        else if (key == "SELECT_LINE_UP")
++            return KEY_SELECT_LINE_UP;
++
++        else if (key == "SELECT_LINE_DOWN")
++            return KEY_SELECT_LINE_DOWN;
++
++        else if (key == "SELECT_HOME")
++            return KEY_SELECT_HOME;
++
++        else if (key == "SELECT_END")
++            return KEY_SELECT_END;
++
++        else if (key == "SELECT_DOC_HOME")
++            return KEY_SELECT_DOC_HOME;
++
++        else if (key == "SELECT_DOC_END")
++            return KEY_SELECT_DOC_END;
++
++        // plain navigation (no selection)
++        else if (key == "WORD_LEFT")
++            return KEY_WORD_LEFT;
++
++        else if (key == "WORD_RIGHT")
++            return KEY_WORD_RIGHT;
++
++        else if (key == "DOC_HOME")
++            return KEY_DOC_HOME;
++
++        else if (key == "DOC_END")
++            return KEY_DOC_END;
++
+         else if (key == "FILE0")
+             return 1000;
+ 
+diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
+index 45f7e4a..b7fdb40 100644
+--- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
++++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
+@@ -155,6 +155,9 @@ void Editor::loadFile(String fileName)
+     resetBuffer();
+     composer.reset();
+ 
++    // a selection can't survive the window swap
++    selectAnchor = -1;
++
+     // Read file content into text buffer
+     int bufferSize = 0;
+     while (file.available())
+@@ -224,6 +227,33 @@ int Editor::nextCharStart(int pos)
+     return pos;
+ }
+ 
++// whitespace for word navigation purposes
++static bool isWordSeparator(char c)
++{
++    return c == ' ' || c == '\n' || c == '\t';
++}
++
++// start of the word before/at pos: skip separators backward, then the word
++int Editor::prevWordStart(int pos)
++{
++    while (pos > 0 && isWordSeparator(buffer[pos - 1]))
++        pos--;
++    while (pos > 0 && !isWordSeparator(buffer[pos - 1]))
++        pos--;
++    return pos;
++}
++
++// end of the word at/after pos: skip separators forward, then the word
++int Editor::nextWordEnd(int pos)
++{
++    int size = getBufferSize();
++    while (pos < size && isWordSeparator(buffer[pos]))
++        pos++;
++    while (pos < size && !isWordSeparator(buffer[pos]))
++        pos++;
++    return pos;
++}
++
+ // Move a file offset back to the start of a UTF-8 character so a window
+ // never begins in the middle of a multi-byte sequence.
+ static size_t alignToCharStart(File &file, size_t pos)
+@@ -483,6 +513,10 @@ bool Editor::loadWindow(size_t offset, size_t length)
+ 
+     resetBuffer();
+     composer.reset();
++
++    // a selection can't survive the window swap
++    selectAnchor = -1;
++
+     size_t bytesRead = 0;
+     while (bytesRead < length && file.available())
+     {
+@@ -558,6 +592,53 @@ void Editor::pageForward()
+     updateScreen();
+ }
+ 
++// Jump to the very start of the file. If the current window doesn't
++// include offset 0, flush it and load the first chunk of the file.
++void Editor::jumpToFileStart()
++{
++    if (seekPos > 0)
++    {
++        if (!saved && !saveFile())
++        {
++            _log("jumpToFileStart: flush failed, staying on current page\n");
++            return;
++        }
++
++        size_t stepSize = BUFFER_SIZE / 2;
++        size_t toLoad = (fileSize < stepSize) ? fileSize : stepSize;
++        if (!loadWindow(0, toLoad))
++            return;
++    }
++
++    cursorPos = 0;
++    updateScreen();
++}
++
++// Jump to the very end of the file. If the current window isn't the tail,
++// flush it and load the last chunk (same window math as loadFile).
++void Editor::jumpToFileEnd()
++{
++    if (seekPos + loadedLength < fileSize)
++    {
++        if (!saved && !saveFile())
++        {
++            _log("jumpToFileEnd: flush failed, staying on current page\n");
++            return;
++        }
++
++        size_t stepSize = BUFFER_SIZE / 2;
++        size_t newSeekPos = (fileSize / stepSize) * stepSize;
++        if (fileSize == newSeekPos && newSeekPos > 0)
++            newSeekPos = (newSeekPos > stepSize) ? newSeekPos - stepSize : 0;
++
++        if (!loadWindow(newSeekPos, fileSize - newSeekPos))
++            return;
++    }
++
++    cursorPos = getBufferSize();
++    updateScreen();
++}
++
+ // The buffer filled up while typing. Flush it, then keep going from
+ // wherever this window ended - either a fresh empty tail window, or the
+ // next chunk of on-disk content if this wasn't the tail. Replaces the old
+@@ -600,6 +681,7 @@ void Editor::advanceWindow()
+         loadedLength = 0;
+         resetBuffer();
+         cursorPos = 0;
++        selectAnchor = -1;
+         pageChanged = true;
+     }
+     else
+@@ -750,11 +832,85 @@ void Editor::keyboard(int key, bool pressed)
+     // below is only for when the key is pressed
+     if (pressed)
+     {
++        //////////////////////////
++        // SELECTION
++        //////////////////////////
++        // Shift+arrow (and Shift+Home/End) arrives as a select code. It
++        // behaves exactly like the plain movement key (the code below is
++        // shared via this translation) except that it anchors/extends the
++        // selection and never pages, because a window swap would invalidate
++        // the anchor. Word/line/document select keys keep their own code and
++        // are handled in their own branch further down.
++        bool selecting = false;
++        if (key >= KEY_SELECT_LEFT && key <= KEY_SELECT_DOC_END)
++        {
++            if (selectionSupported)
++            {
++                selecting = true;
++
++                // selecting ends any composition, same as moving the cursor
++                composer.reset();
++
++                if (selectAnchor < 0)
++                    selectAnchor = cursorPos;
++                selectionChanged = true;
++
++                // character/line select keys share the plain movement code
++                if (key <= KEY_SELECT_DOWN)
++                    key = 18 + (key - KEY_SELECT_LEFT); // arrows
++                else if (key == KEY_SELECT_HOME)
++                    key = 2; // home
++                else if (key == KEY_SELECT_END)
++                    key = 3; // end
++            }
++            else
++            {
++                // no selection on this device - degrade every select key to
++                // its plain movement equivalent
++                switch (key)
++                {
++                case KEY_SELECT_LEFT:
++                case KEY_SELECT_WORD_LEFT:
++                    key = 18;
++                    break;
++                case KEY_SELECT_RIGHT:
++                case KEY_SELECT_WORD_RIGHT:
++                    key = 19;
++                    break;
++                case KEY_SELECT_UP:
++                case KEY_SELECT_LINE_UP:
++                    key = 20;
++                    break;
++                case KEY_SELECT_DOWN:
++                case KEY_SELECT_LINE_DOWN:
++                    key = 21;
++                    break;
++                case KEY_SELECT_HOME:
++                case KEY_SELECT_DOC_HOME:
++                    key = 2;
++                    break;
++                case KEY_SELECT_END:
++                case KEY_SELECT_DOC_END:
++                    key = 3;
++                    break;
++                }
++            }
++        }
++
+         //////////////////////////
+         // BACKWARD EDITING
+         //////////////////////////
+         if (key == '\b')
+         {
++            // with an active selection backspace deletes the selection,
++            // not the character before the cursor
++            if (hasSelection())
++            {
++                composer.reset();
++                deleteSelection();
++                this->backSpacePressed = true;
++            }
++            else
+             // during Hangul composition backspace removes one jamo,
+             // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
+             if (composer.isComposing())
+@@ -798,7 +954,13 @@ void Editor::keyboard(int key, bool pressed)
+             // deleting forward ends any composition
+             composer.reset();
+ 
+-            if (getBufferSize() > 0)
++            // with an active selection DEL deletes the selection
++            if (hasSelection())
++            {
++                deleteSelection();
++                this->backSpacePressed = true;
++            }
++            else if (getBufferSize() > 0)
+             {
+                 // if editing at the end of the line then remove word
+                 if (cursorPos == getBufferSize())
+@@ -835,6 +997,11 @@ void Editor::keyboard(int key, bool pressed)
+             // syllable simply stays in the buffer as normal text
+             composer.reset();
+ 
++            // a plain cursor move drops the selection; a selecting move
++            // (translated Shift+arrow) extends it via the cursor motion below
++            if (!selecting)
++                clearSelection();
++
+             // arrow keys
+             // 18 - Left, 19 - Right, 20 - Up, 21 - Down
+             // 22 - Page Up, 23 - Page Down
+@@ -843,8 +1010,11 @@ void Editor::keyboard(int key, bool pressed)
+             {
+                 if (cursorPos == 0)
+                 {
+-                    // already at the start of the buffer - load the previous page
+-                    pageBackward();
++                    // already at the start of the buffer - load the previous
++                    // page (never while selecting: the window swap would
++                    // invalidate the selection anchor)
++                    if (!selecting)
++                        pageBackward();
+                 }
+                 else
+                 {
+@@ -858,7 +1028,7 @@ void Editor::keyboard(int key, bool pressed)
+                 if (cursorPos < getBufferSize())
+                     // right - move over one whole character
+                     cursorPos = nextCharStart(cursorPos);
+-                else
++                else if (!selecting)
+                     // already at the end of the buffer - load the next page
+                     pageForward();
+             }
+@@ -870,7 +1040,8 @@ void Editor::keyboard(int key, bool pressed)
+                 if (cursorLine == 0)
+                 {
+                     // already at the top line - load the previous page
+-                    pageBackward();
++                    if (!selecting)
++                        pageBackward();
+                 }
+                 else if (cursorLine > 0)
+                 {
+@@ -942,7 +1113,8 @@ void Editor::keyboard(int key, bool pressed)
+                     // already at the end of the buffer - load the next page
+                     if (cursorPos == getBufferSize())
+                     {
+-                        pageForward();
++                        if (!selecting)
++                            pageForward();
+                     }
+                     else
+                     {
+@@ -1025,11 +1197,102 @@ void Editor::keyboard(int key, bool pressed)
+             }
+         }
+ 
++        //////////////////////////
++        // WORD / DOCUMENT NAVIGATION
++        //////////////////////////
++        // Ctrl+arrows / Ctrl+PgUp/PgDn: plain movement, no selection.
++        // Unlike selection these may page to a different file window.
++        else if (key >= KEY_WORD_LEFT && key <= KEY_DOC_END)
++        {
++            composer.reset();
++            clearSelection();
++
++            if (key == KEY_WORD_LEFT)
++                cursorPos = prevWordStart(cursorPos);
++            else if (key == KEY_WORD_RIGHT)
++                cursorPos = nextWordEnd(cursorPos);
++            else if (key == KEY_DOC_HOME)
++                jumpToFileStart();
++            else if (key == KEY_DOC_END)
++                jumpToFileEnd();
++        }
++
++        //////////////////////////
++        // WORD / LINE / DOCUMENT SELECTION
++        //////////////////////////
++        // Only reachable while selecting - the translation above degrades
++        // these to plain arrows when selection isn't supported. Movement
++        // stays inside the loaded window (no paging), like all selection.
++        else if (key >= KEY_SELECT_WORD_LEFT && key <= KEY_SELECT_DOC_END)
++        {
++            if (key == KEY_SELECT_WORD_LEFT)
++            {
++                cursorPos = prevWordStart(cursorPos);
++            }
++            else if (key == KEY_SELECT_WORD_RIGHT)
++            {
++                cursorPos = nextWordEnd(cursorPos);
++            }
++            else if (key == KEY_SELECT_LINE_UP)
++            {
++                // to the start of the current line; if already there,
++                // to the start of the previous line
++                int lineStartPos = linePositions[cursorLine] - buffer;
++                if (cursorPos > lineStartPos)
++                    cursorPos = lineStartPos;
++                else if (cursorLine > 0)
++                    cursorPos = linePositions[cursorLine - 1] - buffer;
++            }
++            else if (key == KEY_SELECT_LINE_DOWN)
++            {
++                // to the start of the next line (taking this line's tail
++                // and its newline with it); on the last line, to the end
++                if (cursorLine < totalLine)
++                    cursorPos = linePositions[cursorLine + 1] - buffer;
++                else
++                    cursorPos = getBufferSize();
++            }
++            else if (key == KEY_SELECT_DOC_HOME)
++            {
++                cursorPos = 0;
++            }
++            else if (key == KEY_SELECT_DOC_END)
++            {
++                cursorPos = getBufferSize();
++            }
++        }
++
++        //////////////////////////
++        // CLIPBOARD
++        //////////////////////////
++        // inert unless the display renders selection - see selectionSupported
++        else if (key >= KEY_SELECT_ALL && key <= KEY_PASTE)
++        {
++            if (selectionSupported)
++            {
++                if (key == KEY_SELECT_ALL)
++                    selectAll();
++                else if (key == KEY_COPY)
++                    copySelection();
++                else if (key == KEY_CUT)
++                    cutSelection();
++                else if (key == KEY_PASTE)
++                    paste();
++            }
++        }
++
+         //////////////////////////
+         // FORWARD EDITING
+         //////////////////////////
+         else
+         {
++            // typing replaces the selection, like any ordinary editor
++            if (hasSelection())
++            {
++                composer.reset();
++                deleteSelection();
++            }
++
+             // add to the edit buffer new character
+             // (a character can be up to 4 UTF-8 bytes, so flush a little
+             // before the boundary so an insert never overruns it)
+@@ -1348,6 +1611,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+     charReplaced = true;
+ }
+ 
++//
++// SELECTION AND CLIPBOARD
++//
++
++void Editor::clearSelection()
++{
++    // only flag a repaint when there was actually something to clear -
++    // plain cursor keys call this on every press
++    if (selectAnchor >= 0)
++        selectionChanged = true;
++
++    selectAnchor = -1;
++}
++
++// Remove the selected bytes from the buffer and leave the cursor where the
++// selection began.
++void Editor::deleteSelection()
++{
++    if (!hasSelection())
++    {
++        clearSelection();
++        return;
++    }
++
++    int start = selectionStart();
++    int end = selectionEnd();
++    int bufferSize = getBufferSize();
++
++    if (bufferSize > end)
++        memmove(buffer + start, buffer + end, bufferSize - end);
++
++    buffer[bufferSize - (end - start)] = '\0';
++    cursorPos = start;
++
++    clearSelection();
++    saved = false;
++
++    _debug("Editor::deleteSelection %d bytes at %d\n", end - start, start);
++}
++
++void Editor::selectAll()
++{
++    composer.reset();
++
++    selectAnchor = 0;
++    cursorPos = getBufferSize();
++    selectionChanged = true;
++}
++
++void Editor::copySelection()
++{
++    if (!hasSelection())
++        return;
++
++    int start = selectionStart();
++    int len = selectionEnd() - start;
++
++    if (len > CLIPBOARD_SIZE - 1)
++    {
++        len = CLIPBOARD_SIZE - 1;
++        // never truncate in the middle of a UTF-8 character
++        while (len > 0 && utf8_is_continuation((uint8_t)buffer[start + len]))
++            len--;
++    }
++
++    memcpy(clipboard, buffer + start, len);
++    clipboard[len] = '\0';
++
++    _debug("Editor::copySelection %d bytes\n", len);
++}
++
++void Editor::cutSelection()
++{
++    if (!hasSelection())
++        return;
++
++    copySelection();
++    deleteSelection();
++}
++
++// Insert the clipboard at the cursor, replacing the selection if there is
++// one. If the window can't hold the insert, flush it first exactly like
++// typing does when the buffer fills up.
++void Editor::paste()
++{
++    int len = strlen(clipboard);
++    if (len == 0)
++        return;
++
++    composer.reset();
++
++    if (hasSelection())
++        deleteSelection();
++
++    // same flush rule as typing: make sure the insert fits in the window
++    if (getBufferSize() + len + 4 >= BUFFER_SIZE)
++        advanceWindow();
++
++    int bufferSize = getBufferSize();
++    if (bufferSize + len >= (int)sizeof(buffer) - 1)
++    {
++        // advanceWindow failed to free space (e.g. save error) - don't
++        // paste partially
++        _log("Editor::paste: no room to paste %d bytes\n", len);
++        return;
++    }
++
++    if (bufferSize > cursorPos)
++        memmove(buffer + cursorPos + len, buffer + cursorPos, bufferSize - cursorPos);
++
++    memcpy(buffer + cursorPos, clipboard, len);
++    buffer[bufferSize + len] = '\0';
++    cursorPos += len;
++
++    saved = false;
++
++    _debug("Editor::paste %d bytes at %d\n", len, cursorPos - len);
++}
++
+ void Editor::removeLastWord()
+ {
+     int length = getBufferSize();
+diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
+index 15a36fe..53ea1f6 100644
+--- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
++++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
+@@ -16,6 +16,52 @@
+ #define BUFFER_SIZE 8000
+ #endif
+ 
++// Clipboard for copy/cut/paste. Kept well under half the buffer so a paste
++// always fits into a freshly advanced window.
++#define CLIPBOARD_SIZE (BUFFER_SIZE / 4)
++
++// Selection and clipboard key codes. Placed above the MACRO range
++// (2000-2009) so they can never collide with ASCII, the cursor codes
++// (2,3,18-23), MENU (0x6) or the FILE keys (1000-1010).
++// KEY_SELECT_LEFT..KEY_SELECT_DOWN must stay contiguous and in the same
++// order as the plain arrow codes 18..21 - the editor maps between them
++// arithmetically.
++#define KEY_SELECT_LEFT 2100
++#define KEY_SELECT_RIGHT 2101
++#define KEY_SELECT_UP 2102
++#define KEY_SELECT_DOWN 2103
++#define KEY_SELECT_ALL 2104
++#define KEY_COPY 2105
++#define KEY_CUT 2106
++#define KEY_PASTE 2107
++
++// Word / line / document selection (Ctrl+Shift+arrows, Shift+Home/End,
++// Ctrl+Shift+Home/End). KEY_SELECT_LEFT..KEY_SELECT_DOC_END must stay one
++// contiguous range - the editor and keypad test membership with range
++// comparisons.
++#define KEY_SELECT_WORD_LEFT 2108
++#define KEY_SELECT_WORD_RIGHT 2109
++#define KEY_SELECT_LINE_UP 2110
++#define KEY_SELECT_LINE_DOWN 2111
++#define KEY_SELECT_HOME 2112
++#define KEY_SELECT_END 2113
++#define KEY_SELECT_DOC_HOME 2114
++#define KEY_SELECT_DOC_END 2115
++
++// Plain navigation (no selection): word jumps and document start/end.
++// Outside the SELECT range on purpose - these clear the selection and may
++// page to a different window of the file. Contiguous range.
++#define KEY_WORD_LEFT 2116
++#define KEY_WORD_RIGHT 2117
++#define KEY_DOC_HOME 2118
++#define KEY_DOC_END 2119
++
++// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
++// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
++// codes above) and never reach the editor.
++#define KEY_MOD_CTRL 15
++#define KEY_MOD_GUI 16
++
+ //
+ class Editor
+ {
+@@ -117,6 +163,11 @@ public:
+     void pageForward();
+     void advanceWindow();
+ 
++    // Jump to the very start / end of the file, loading a different
++    // window if the target lies outside the current one
++    void jumpToFileStart();
++    void jumpToFileEnd();
++
+     //
+     bool savingInProgress = false;
+ 
+@@ -144,12 +195,53 @@ public:
+     HangulComposer composer;
+     void replaceCharBeforeCursor(uint32_t codepoint);
+ 
++    //////////////////////////////////
++    // SELECTION AND CLIPBOARD
++    //
++    // The selection is the byte range [selectionStart(), selectionEnd())
++    // between the anchor (set when selecting starts) and the cursor.
++    // Both ends always sit on UTF-8 character boundaries because they only
++    // ever take values the cursor itself can take.
++
++    // Fixed end of the selection as a buffer byte offset, -1 = no selection
++    int selectAnchor = -1;
++
++    // Set whenever the selection changes in any way (extended, cleared,
++    // deleted). The highlight can span any line, so display code consumes
++    // this to trigger a full repaint.
++    bool selectionChanged = false;
++
++    // Selection is only handled for displays that render it (set in the
++    // display's setup). When false the select keys act as plain cursor
++    // movement, so devices sharing this editor never build up an invisible
++    // selection that a later keystroke would silently delete.
++    bool selectionSupported = false;
++
++    bool hasSelection() { return selectAnchor >= 0 && selectAnchor != cursorPos; }
++    int selectionStart() { return min(selectAnchor, cursorPos); }
++    int selectionEnd() { return max(selectAnchor, cursorPos); }
++
++    void clearSelection();
++    void deleteSelection();
++    void selectAll();
++    void copySelection();
++    void cutSelection();
++    void paste();
++
++    // Clipboard content, NUL-terminated UTF-8
++    char clipboard[CLIPBOARD_SIZE] = {0};
++
+     // UTF-8 character navigation over the buffer. Positions passed in and
+     // returned are byte offsets that land on character boundaries.
+     int snapToCharStart(int pos); // back up to the lead byte at/before pos
+     int prevCharStart(int pos);   // start of the character before pos
+     int nextCharStart(int pos);   // start of the character after pos
+ 
++    // Word navigation: words are runs of non-whitespace. Whitespace bytes
++    // are plain ASCII, so byte scanning always lands on UTF-8 boundaries.
++    int prevWordStart(int pos); // start of the word before/at pos
++    int nextWordEnd(int pos);   // end of the word at/after pos
++
+     //
+     void updateScreen();
+ 
