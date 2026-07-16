@@ -26,6 +26,13 @@ Ctrl+Shift+↑/↓: line · Shift+Home/End: to line start/end · Ctrl+A: all.
 **Clipboard** — Ctrl+C / X / V: copy / cut / paste (2 KB clipboard,
 UTF-8 safe).
 
+**To-do scratchpad** — Ctrl+Shift+N from the editor or the menu opens a
+plain-text scratchpad (status bar shows `TODO`); ESC saves it and returns
+to the file you were in. The scratchpad is hidden file slot 10 — it lives
+on the drive as `10.txt` (visible in Drive Mode, included in sync), and
+Fn+0–9 can't reach it. Switching files with Fn+number while in the
+scratchpad leaves it like any other file.
+
 Typing replaces the selection; Backspace/DEL delete it; plain movement
 drops it.
 

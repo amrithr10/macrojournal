@@ -1,8 +1,40 @@
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..55c90d9 100644
+index bade544..b6788a7 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-@@ -91,6 +91,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -44,6 +44,31 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+ // active font, selected in WP_setup from config "font"
+ static EditorFont *wp_font = &WP_FONTS[0];
+ 
++// TO-DO SCRATCHPAD (Ctrl+Shift+N)
++// The scratchpad is the hidden file slot 10 ("/10.txt") - one above the
++// Fn+0..9 range - so saving, word counts, sync and Drive Mode all work
++// unchanged. While open, this remembers the file to return to on ESC;
++// -1 means the scratchpad is not open.
++static int scratch_prev_index = -1;
++#define SCRATCH_FILE_INDEX 10
++
++// Open the scratchpad from another screen (e.g. the menu): swap the
++// configured file index and let WP_setup load it when the screen changes
++// to the word processor.
++void WP_requestScratchpad()
++{
++    JsonDocument &app = status();
++
++    if (scratch_prev_index < 0)
++    {
++        scratch_prev_index = app["config"]["file_index"].as<int>();
++        app["config"]["file_index"] = SCRATCH_FILE_INDEX;
++        config_save();
++    }
++
++    app["screen"] = WORDPROCESSOR;
++}
++
+ // layout derived from the active font metrics in WP_setup
+ static int editY = 264;   // baseline of the edit line
+ static int cursorY = 270; // top of the cursor band under the edit line
+@@ -91,6 +116,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -13,7 +45,7 @@ index bade544..55c90d9 100644
      // load file from the editor
      int file_index = app["config"]["file_index"].as<int>();
      Editor::getInstance().loadFile(format("/%d.txt", file_index));
-@@ -161,6 +165,7 @@ bool WP_contentChanged()
+@@ -161,6 +190,7 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
@@ -21,7 +53,7 @@ index bade544..55c90d9 100644
  
      JsonDocument &app = status();
  
-@@ -170,6 +175,7 @@ bool WP_contentChanged()
+@@ -170,6 +200,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -29,7 +61,7 @@ index bade544..55c90d9 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,6 +186,7 @@ bool WP_contentChanged()
+@@ -180,6 +211,7 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
@@ -37,7 +69,7 @@ index bade544..55c90d9 100644
                     blinkPhase != blinkPhase_prev;
  
      cursorPos_prev = cursorPos;
-@@ -188,6 +195,7 @@ bool WP_contentChanged()
+@@ -188,6 +220,7 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
@@ -45,7 +77,7 @@ index bade544..55c90d9 100644
      blinkPhase_prev = blinkPhase;
  
      return changed;
-@@ -244,6 +252,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +277,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -60,7 +92,7 @@ index bade544..55c90d9 100644
      //
      JsonDocument &app = status();
  
-@@ -306,19 +322,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -306,19 +347,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  //
  void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
  {
@@ -127,8 +159,143 @@ index bade544..55c90d9 100644
  }
  
  //
+@@ -382,11 +468,15 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     // STATUS BAR
+     display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
+ 
+-    // FILE INDEX
++    // FILE INDEX (the scratchpad slot shows as TODO)
+     u8->setFont(u8g2_font_profont17_tf);
+     u8->setScale(1);
+     u8->setCursor(5, STATUSBAR_Y);
+-    u8->printf("FILE %d ", app["config"]["file_index"].as<int>());
++    int file_index = app["config"]["file_index"].as<int>();
++    if (file_index == SCRATCH_FILE_INDEX)
++        u8->printf("TODO ");
++    else
++        u8->printf("FILE %d ", file_index);
+ 
+     // WORD COUNT
+     u8->setCursor(100, STATUSBAR_Y);
+@@ -486,14 +576,51 @@ void WP_keyboard(int key, bool pressed, int index)
+     {
+         if (!pressed)
+         {
+-            // Save before transitioning to the menu
++            // Save before leaving the current text
+             Editor::getInstance().saveFile();
+ 
++            // ESC from the scratchpad returns to the file the writer was
++            // in, not to the menu
++            if (scratch_prev_index >= 0)
++            {
++                int fileIndex = scratch_prev_index;
++                scratch_prev_index = -1;
++
++                app["config"]["file_index"] = fileIndex;
++                config_save();
++
++                Editor::getInstance().loadFile(format("/%d.txt", fileIndex));
++
++                _debug("WP_keyboard::Closing scratchpad, back to file %d\n", fileIndex);
++            }
++            else
++            {
++                //
++                app["screen"] = MENUSCREEN;
++
++                //
++                _debug("WP_keyboard::Moving to Menu Screen\n");
++            }
++        }
++    }
++
++    // Ctrl+Shift+N: open the to-do scratchpad
++    else if (key == KEY_SCRATCHPAD)
++    {
++        if (!pressed && scratch_prev_index < 0)
++        {
++            _log("Scratchpad opened\n");
++
+             //
+-            app["screen"] = MENUSCREEN;
++            Editor::getInstance().saveFile();
+ 
+             //
+-            _debug("WP_keyboard::Moving to Menu Screen\n");
++            scratch_prev_index = app["config"]["file_index"].as<int>();
++            app["config"]["file_index"] = SCRATCH_FILE_INDEX;
++            config_save();
++
++            //
++            Editor::getInstance().loadFile(format("/%d.txt", SCRATCH_FILE_INDEX));
+         }
+     }
+ 
+@@ -505,6 +632,10 @@ void WP_keyboard(int key, bool pressed, int index)
+             int fileIndex = key - 1000;
+             _log("File Change Requested: %d\n", fileIndex);
+ 
++            // switching files directly leaves the scratchpad - ESC should
++            // then open the menu as usual, not jump back
++            scratch_prev_index = -1;
++
+             //
+             Editor::getInstance().saveFile();
+ 
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
+index 718c49d..ec9cfc3 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.h
+@@ -30,9 +30,14 @@ void WP_render_cursor(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ 
+ //
+ 
+-// 
++//
+ void WP_keyboard(int key, bool pressed, int index = -1);
+ 
++// Open the to-do scratchpad from another screen (Ctrl+Shift+N in the menu):
++// swaps the configured file to the scratchpad slot and switches the screen
++// to the word processor.
++void WP_requestScratchpad();
++
+ //
+ String formatNumberWithCommas(long num);
+ 
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
+index dc0b18b..dff5031 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
+@@ -13,6 +13,9 @@ const ST73xxPins PINS{PIN_DC, PIN_CS, PIN_SCLK, PIN_MOSI, PIN_RST};
+ ST7305_4p2_BW_DisplayDriver display(PINS, SPI);
+ U8G2_FOR_ST73XX u8g2;
+ 
++// for KEY_SCRATCHPAD
++#include "service/Editor/Editor.h"
++
+ // screens
+ #include "ErrorScreen/ErrorScreen.h"
+ #include "WordProcessor/WordProcessor.h"
+@@ -176,6 +179,16 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
+   JsonDocument &app = status();
+   int screen = app["screen"].as<int>();
+ 
++  // Ctrl+Shift+N opens the to-do scratchpad from the menu as well.
++  // (In the word processor WP_keyboard handles the key itself; screens
++  // that pass keys elsewhere - keyboard mode, updater - are left alone.)
++  if (key == KEY_SCRATCHPAD && screen == MENUSCREEN)
++  {
++    if (!pressed)
++      WP_requestScratchpad();
++    return;
++  }
++
+   if (screen == ERRORSCREEN)
+   {
+     if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..580b3ba 100644
+index d8832fa..e63342e 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -202,7 +369,7 @@ index d8832fa..580b3ba 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,57 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,61 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -225,6 +392,10 @@ index d8832fa..580b3ba 100644
 +            return KEY_CUT;
 +        if (letter == 'v')
 +            return KEY_PASTE;
++
++        // Ctrl/GUI + Shift + N: open the to-do scratchpad
++        if (letter == 'n' && _shift_pressed)
++            return KEY_SCRATCHPAD;
 +
 +        // Ctrl/GUI + Shift + arrows: upgrade the character/line select keys
 +        // (from the shift layer) to word / line selection
@@ -260,7 +431,7 @@ index d8832fa..580b3ba 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +356,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +360,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -274,7 +445,7 @@ index d8832fa..580b3ba 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..ab7fc39 100644
+index aa3d65d..b33d4f7 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -301,7 +472,7 @@ index aa3d65d..ab7fc39 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,68 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,71 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -354,6 +525,9 @@ index aa3d65d..ab7fc39 100644
 +        else if (key == "SELECT_DOC_END")
 +            return KEY_SELECT_DOC_END;
 +
++        else if (key == "SCRATCHPAD")
++            return KEY_SCRATCHPAD;
++
 +        // plain navigation (no selection)
 +        else if (key == "WORD_LEFT")
 +            return KEY_WORD_LEFT;
@@ -371,7 +545,7 @@ index aa3d65d..ab7fc39 100644
              return 1000;
  
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..b7fdb40 100644
+index 45f7e4a..58c1de3 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -155,6 +155,9 @@ void Editor::loadFile(String fileName)
@@ -491,7 +665,20 @@ index 45f7e4a..b7fdb40 100644
          pageChanged = true;
      }
      else
-@@ -750,11 +832,85 @@ void Editor::keyboard(int key, bool pressed)
+@@ -716,8 +798,10 @@ void Editor::keyboard(int key, bool pressed)
+ {
+     // ignore non printable character
+     // (1 is the "consumed" sentinel from the keyboard locale layer,
+-    // e.g. the Hangul/English toggle key which must type nothing)
+-    if (key == 0 || key == 1 || key == 27 || key == MENU)
++    // e.g. the Hangul/English toggle key which must type nothing.
++    // KEY_SCRATCHPAD belongs to the display layer - displays that don't
++    // implement the scratchpad must not type it as a character)
++    if (key == 0 || key == 1 || key == 27 || key == MENU || key == KEY_SCRATCHPAD)
+         return;
+ 
+     //
+@@ -750,11 +834,85 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -577,7 +764,7 @@ index 45f7e4a..b7fdb40 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +954,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +956,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -592,7 +779,7 @@ index 45f7e4a..b7fdb40 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +997,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +999,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -604,7 +791,7 @@ index 45f7e4a..b7fdb40 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1010,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1012,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -618,7 +805,7 @@ index 45f7e4a..b7fdb40 100644
                  }
                  else
                  {
-@@ -858,7 +1028,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1030,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -627,7 +814,7 @@ index 45f7e4a..b7fdb40 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1040,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1042,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -637,7 +824,7 @@ index 45f7e4a..b7fdb40 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1113,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1115,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -647,7 +834,7 @@ index 45f7e4a..b7fdb40 100644
                      }
                      else
                      {
-@@ -1025,11 +1197,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1199,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -750,7 +937,7 @@ index 45f7e4a..b7fdb40 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1348,6 +1611,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1613,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -877,10 +1064,10 @@ index 45f7e4a..b7fdb40 100644
  {
      int length = getBufferSize();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..53ea1f6 100644
+index 15a36fe..8dc15ec 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,52 @@
+@@ -16,6 +16,56 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -924,6 +1111,10 @@ index 15a36fe..53ea1f6 100644
 +#define KEY_DOC_HOME 2118
 +#define KEY_DOC_END 2119
 +
++// Ctrl+Shift+N: open the to-do scratchpad (handled by the display layer,
++// never by the editor - it swaps the loaded file, ESC swaps back)
++#define KEY_SCRATCHPAD 2120
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -933,7 +1124,7 @@ index 15a36fe..53ea1f6 100644
  //
  class Editor
  {
-@@ -117,6 +163,11 @@ public:
+@@ -117,6 +167,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -945,7 +1136,7 @@ index 15a36fe..53ea1f6 100644
      //
      bool savingInProgress = false;
  
-@@ -144,12 +195,53 @@ public:
+@@ -144,12 +199,53 @@ public:
      HangulComposer composer;
      void replaceCharBeforeCursor(uint32_t codepoint);
  
