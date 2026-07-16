@@ -530,7 +530,7 @@ index dc0b18b..f2edd94 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..7816a56 100644
+index d8832fa..e903dae 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -604,7 +604,7 @@ index d8832fa..7816a56 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,75 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,79 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -656,6 +656,10 @@ index d8832fa..7816a56 100644
 +        if (key == KEY_SELECT_END)
 +            return 3;
 +
++        // Ctrl/GUI + Backspace: delete the word before the cursor
++        if (key == '\b')
++            return KEY_DELETE_WORD;
++
 +        // Ctrl/GUI + Left/Right: move one word at a time
 +        if (key == 18)
 +            return KEY_WORD_LEFT;
@@ -680,7 +684,7 @@ index d8832fa..7816a56 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +374,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +378,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -694,7 +698,7 @@ index d8832fa..7816a56 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..b33d4f7 100644
+index aa3d65d..fef612e 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -721,7 +725,7 @@ index aa3d65d..b33d4f7 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,71 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,74 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -789,6 +793,9 @@ index aa3d65d..b33d4f7 100644
 +
 +        else if (key == "DOC_END")
 +            return KEY_DOC_END;
++
++        else if (key == "DELETE_WORD")
++            return KEY_DELETE_WORD;
 +
          else if (key == "FILE0")
              return 1000;
@@ -1219,7 +1226,7 @@ index 0000000..69f44c4
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..d2cdb70 100644
+index 45f7e4a..739a06f 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -155,6 +155,9 @@ void Editor::loadFile(String fileName)
@@ -1353,7 +1360,7 @@ index 45f7e4a..d2cdb70 100644
          return;
  
      //
-@@ -750,11 +835,85 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +835,102 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -1422,10 +1429,28 @@ index 45f7e4a..d2cdb70 100644
 +            }
 +        }
 +
++        //////////////////////////
++        // DELETE WORD (Ctrl+Backspace)
++        //////////////////////////
++        if (key == KEY_DELETE_WORD)
++        {
++            composer.reset();
++
++            // a selection takes precedence, same as plain backspace
++            if (hasSelection())
++                deleteSelection();
++            else
++                deleteWordBeforeCursor();
++
++            this->saved = false;
++            this->backSpacePressed = true;
++        }
++
          //////////////////////////
          // BACKWARD EDITING
          //////////////////////////
-         if (key == '\b')
+-        if (key == '\b')
++        else if (key == '\b')
          {
 +            // with an active selection backspace deletes the selection,
 +            // not the character before the cursor
@@ -1439,7 +1464,7 @@ index 45f7e4a..d2cdb70 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +957,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +974,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -1454,7 +1479,7 @@ index 45f7e4a..d2cdb70 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +1000,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1017,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -1466,7 +1491,7 @@ index 45f7e4a..d2cdb70 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1013,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1030,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -1480,7 +1505,7 @@ index 45f7e4a..d2cdb70 100644
                  }
                  else
                  {
-@@ -858,7 +1031,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1048,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -1489,7 +1514,7 @@ index 45f7e4a..d2cdb70 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1043,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1060,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -1499,7 +1524,7 @@ index 45f7e4a..d2cdb70 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1116,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1133,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -1509,7 +1534,7 @@ index 45f7e4a..d2cdb70 100644
                      }
                      else
                      {
-@@ -1025,11 +1200,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1217,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -1612,7 +1637,7 @@ index 45f7e4a..d2cdb70 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1348,6 +1614,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1631,125 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1738,11 +1763,39 @@ index 45f7e4a..d2cdb70 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
+@@ -1381,3 +1783,27 @@ void Editor::removeLastWord()
+     //
+     _debug("FileBuffer::removeLastWord %d\n", cursorPos);
+ }
++
++// Ctrl+Backspace: delete the whole word to the left of the cursor. Works
++// at any cursor position (unlike removeLastWord, which acts on the buffer
++// end). prevWordStart skips trailing spaces then the word, so pressing it
++// repeatedly chews back word by word.
++void Editor::deleteWordBeforeCursor()
++{
++    if (cursorPos <= 0)
++        return;
++
++    int start = prevWordStart(cursorPos);
++    int len = cursorPos - start;
++    if (len <= 0)
++        return;
++
++    int bufferSize = getBufferSize();
++
++    // shift the trailing text left over the deleted word
++    memmove(buffer + start, buffer + cursorPos, bufferSize - cursorPos);
++    buffer[bufferSize - len] = '\0';
++    cursorPos = start;
++
++    _debug("Editor::deleteWordBeforeCursor removed %d bytes, cursorPos %d\n", len, cursorPos);
++}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..1ef35eb 100644
+index 15a36fe..89ba2c8 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,62 @@
+@@ -16,6 +16,65 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -1796,6 +1849,9 @@ index 15a36fe..1ef35eb 100644
 +#define KEY_ASK_CLAUDE 2121
 +#define KEY_ASK_SEND 2122
 +
++// Ctrl/GUI + Backspace: delete the whole word before the cursor
++#define KEY_DELETE_WORD 2123
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -1805,7 +1861,7 @@ index 15a36fe..1ef35eb 100644
  //
  class Editor
  {
-@@ -117,6 +173,11 @@ public:
+@@ -117,6 +176,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -1817,7 +1873,14 @@ index 15a36fe..1ef35eb 100644
      //
      bool savingInProgress = false;
  
-@@ -144,12 +205,53 @@ public:
+@@ -138,18 +202,60 @@ public:
+     void removeLastChar();
+     void removeCharAtCursor();
+     void removeLastWord();
++    void deleteWordBeforeCursor(); // Ctrl+Backspace: delete word left of cursor
+ 
+     // Hangul composition: jamo keystrokes are assembled into syllables and
+     // the character before the cursor is updated in place as it evolves
      HangulComposer composer;
      void replaceCharBeforeCursor(uint32_t codepoint);
  
