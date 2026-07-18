@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..781b9e1 100644
+index bade544..b8c8fbf 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -505,7 +505,7 @@ index bade544..781b9e1 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +775,106 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +775,111 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -545,7 +545,8 @@ index bade544..781b9e1 100644
 +    // Ctrl+Shift+N: open the to-do scratchpad
 +    else if (key == KEY_SCRATCHPAD)
 +    {
-+        if (!pressed && app["config"]["file_index"].as<int>() != SCRATCH_FILE_INDEX)
++        // act on press: releasing the modifiers first must not matter
++        if (pressed && app["config"]["file_index"].as<int>() != SCRATCH_FILE_INDEX)
 +        {
 +            _log("Scratchpad opened\n");
 +            WP_openOverlay(SCRATCH_FILE_INDEX);
@@ -555,7 +556,8 @@ index bade544..781b9e1 100644
 +    // Ctrl+Shift+C: open the Ask Claude screen
 +    else if (key == KEY_ASK_CLAUDE)
 +    {
-+        if (!pressed && app["config"]["file_index"].as<int>() != ASK_FILE_INDEX)
++        // act on press: releasing the modifiers first must not matter
++        if (pressed && app["config"]["file_index"].as<int>() != ASK_FILE_INDEX)
 +        {
 +            _log("Ask Claude opened\n");
 +            WP_openOverlay(ASK_FILE_INDEX);
@@ -568,7 +570,9 @@ index bade544..781b9e1 100644
 +    // GRAMMAR overlay - the original is never modified.
 +    else if (key == KEY_GRAMMAR || key == KEY_REWRITE)
 +    {
-+        if (!pressed &&
++        // act on press: on release of a 3-key chord the modifiers are often
++        // already up, re-resolving Ctrl+Shift+G into plain Ctrl+G
++        if (pressed &&
 +            app["config"]["file_index"].as<int>() != GRAMMAR_FILE_INDEX &&
 +            Editor::getInstance().getBufferSize() > 0 &&
 +            askclaude_status() != ASK_BUSY)
@@ -602,7 +606,8 @@ index bade544..781b9e1 100644
 +    {
 +        if (app["config"]["file_index"].as<int>() == ASK_FILE_INDEX)
 +        {
-+            if (!pressed)
++            // act on press, same chord-release reasoning as above
++            if (pressed)
 +            {
 +                // save first so the question survives even if the request
 +                // dies mid-flight
@@ -617,7 +622,7 @@ index bade544..781b9e1 100644
          }
      }
  
-@@ -505,6 +886,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +891,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
