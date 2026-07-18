@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..90374e5 100644
+index bade544..781b9e1 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -505,7 +505,7 @@ index bade544..90374e5 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +775,89 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +775,106 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -562,19 +562,36 @@ index bade544..90374e5 100644
 +        }
 +    }
 +
-+    // Ctrl+Shift+G: grammar-check the current file. The text is snapshotted
-+    // before the overlay swap, and the report lands in the GRAMMAR overlay.
-+    else if (key == KEY_GRAMMAR)
++    // Ctrl+G: grammar-check; Ctrl+Shift+G: rewrite with corrected grammar.
++    // With an active selection only the selected text is reviewed. The text
++    // is captured before the overlay swap, and the result lands in the
++    // GRAMMAR overlay - the original is never modified.
++    else if (key == KEY_GRAMMAR || key == KEY_REWRITE)
 +    {
 +        if (!pressed &&
 +            app["config"]["file_index"].as<int>() != GRAMMAR_FILE_INDEX &&
 +            Editor::getInstance().getBufferSize() > 0 &&
 +            askclaude_status() != ASK_BUSY)
 +        {
-+            _log("Grammar check requested\n");
++            Editor &editor = Editor::getInstance();
 +
-+            Editor::getInstance().saveFile();
-+            askclaude_grammar_request(); // snapshots the current buffer
++            // the selection (if any), otherwise the whole file
++            String text;
++            if (editor.hasSelection())
++            {
++                int start = editor.selectionStart();
++                int length = editor.selectionEnd() - start;
++                text.reserve(length + 1);
++                text.concat(editor.buffer + start, length);
++            }
++            else
++                text = editor.buffer;
++
++            _log("Grammar %s requested (%d bytes)\n",
++                 key == KEY_REWRITE ? "rewrite" : "check", text.length());
++
++            editor.saveFile();
++            askclaude_review_request(text.c_str(), key == KEY_REWRITE);
 +            WP_openOverlay(GRAMMAR_FILE_INDEX);
 +        }
 +    }
@@ -600,7 +617,7 @@ index bade544..90374e5 100644
          }
      }
  
-@@ -505,6 +869,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +886,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -670,7 +687,7 @@ index dc0b18b..f2edd94 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..5d1dc98 100644
+index d8832fa..c8d6231 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -744,7 +761,7 @@ index d8832fa..5d1dc98 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,93 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,96 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -767,8 +784,11 @@ index d8832fa..5d1dc98 100644
 +        if (letter == 'c' && _shift_pressed)
 +            return KEY_ASK_CLAUDE;
 +
-+        // Ctrl/GUI + Shift + G runs a grammar check on the current file
++        // Ctrl/GUI + Shift + G rewrites with corrected grammar;
++        // Ctrl/GUI + G runs the grammar check (selection or whole file)
 +        if (letter == 'g' && _shift_pressed)
++            return KEY_REWRITE;
++        if (letter == 'g')
 +            return KEY_GRAMMAR;
 +
 +        // Ctrl/GUI + B / I wrap the selection in bold/italic markers
@@ -838,7 +858,7 @@ index d8832fa..5d1dc98 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +392,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +395,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -852,7 +872,7 @@ index d8832fa..5d1dc98 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..1805b8c 100644
+index aa3d65d..74e0ab1 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -879,7 +899,7 @@ index aa3d65d..1805b8c 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,89 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,92 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -954,6 +974,9 @@ index aa3d65d..1805b8c 100644
 +        else if (key == "GRAMMAR")
 +            return KEY_GRAMMAR;
 +
++        else if (key == "REWRITE")
++            return KEY_REWRITE;
++
 +        else if (key == "BOLD")
 +            return KEY_BOLD;
 +
@@ -971,10 +994,10 @@ index aa3d65d..1805b8c 100644
  
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 new file mode 100644
-index 0000000..a92f1c0
+index 0000000..b5c57af
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
-@@ -0,0 +1,424 @@
+@@ -0,0 +1,463 @@
 +#include "AskClaude.h"
 +#include "app/app.h"
 +
@@ -997,9 +1020,10 @@ index 0000000..a92f1c0
 +static volatile bool _answer_ready = false;
 +
 +// request modes: a conversation from the ask screen, or a grammar review
-+// of a snapshot of whichever file the writer was in
++// (issue list or full rewrite) of text handed over by the display
 +#define MODE_CONVERSATION 0
 +#define MODE_GRAMMAR 1
++#define MODE_REWRITE 2
 +static volatile int _mode = MODE_CONVERSATION;
 +static volatile bool _answer_grammar = false;
 +
@@ -1009,6 +1033,7 @@ index 0000000..a92f1c0
 +static int _max_tokens = 1024;
 +static String _system = "";
 +static String _grammar_system = "";
++static String _rewrite_system = "";
 +
 +// default reviewer instructions; override with "grammar_system" in claude.json
 +static const char *GRAMMAR_SYSTEM_DEFAULT =
@@ -1019,6 +1044,15 @@ index 0000000..a92f1c0
 +    "corrected phrase. Plain text only - no markdown. Skip sentences that "
 +    "are fine. End with one short line on overall quality. If there are no "
 +    "issues, just say the text looks clean.";
++
++// override with "rewrite_system" in claude.json
++static const char *REWRITE_SYSTEM_DEFAULT =
++    "You are a careful copy editor. The user sends a piece of writing from a "
++    "small plain-text writing device. Rewrite it with grammar, spelling and "
++    "punctuation corrected. Preserve the writer's voice, wording, line "
++    "breaks and any *emphasis* markers - fix only what is wrong, never "
++    "paraphrase or improve style. Output ONLY the corrected text: no "
++    "preamble, no commentary, no markdown fences.";
 +
 +//
 +int askclaude_status() { return _state; }
@@ -1075,6 +1109,7 @@ index 0000000..a92f1c0
 +    _max_tokens = doc["max_tokens"] | 1024;
 +    _system = doc["system"] | "";
 +    _grammar_system = doc["grammar_system"] | GRAMMAR_SYSTEM_DEFAULT;
++    _rewrite_system = doc["rewrite_system"] | REWRITE_SYSTEM_DEFAULT;
 +
 +    if (_api_key.length() < 10)
 +    {
@@ -1233,7 +1268,9 @@ index 0000000..a92f1c0
 +// the blocking worker - runs on the background core
 +static void ask_run()
 +{
-+    _status_text = (_mode == MODE_GRAMMAR) ? "CHECKING (WIFI)..." : "ASKING (WIFI)...";
++    _status_text = (_mode == MODE_REWRITE)   ? "REWRITING (WIFI)..."
++                   : (_mode == MODE_GRAMMAR) ? "CHECKING (WIFI)..."
++                                             : "ASKING (WIFI)...";
 +
 +    if (!ask_load_config())
 +        return;
@@ -1242,13 +1279,27 @@ index 0000000..a92f1c0
 +    // empty prompt without touching the radio
 +    JsonDocument requestDoc;
 +    requestDoc["model"] = _model;
-+    requestDoc["max_tokens"] = _max_tokens;
++
++    // a rewrite must be able to return the whole corrected text, so give
++    // it output room proportional to the input (~1 token per 3 bytes,
++    // with slack), never less than the configured max_tokens
++    int maxTokens = _max_tokens;
++    if (_mode == MODE_REWRITE)
++    {
++        int needed = (int)_prompt.length() / 3 + 256;
++        if (needed > maxTokens)
++            maxTokens = needed;
++        if (maxTokens > 6000)
++            maxTokens = 6000;
++    }
++    requestDoc["max_tokens"] = maxTokens;
++
 +    JsonArray messages = requestDoc["messages"].to<JsonArray>();
 +
-+    if (_mode == MODE_GRAMMAR)
++    if (_mode == MODE_GRAMMAR || _mode == MODE_REWRITE)
 +    {
 +        // one user turn: the text under review; the reviewer role comes
-+        // from the grammar system prompt
++        // from the mode's system prompt
 +        String text = _prompt;
 +        text.trim();
 +        if (text.length() == 0)
@@ -1257,7 +1308,8 @@ index 0000000..a92f1c0
 +            return;
 +        }
 +
-+        requestDoc["system"] = _grammar_system;
++        requestDoc["system"] = (_mode == MODE_REWRITE) ? _rewrite_system
++                                                       : _grammar_system;
 +        JsonObject msg = messages.add<JsonObject>();
 +        msg["role"] = "user";
 +        msg["content"] = text;
@@ -1284,7 +1336,9 @@ index 0000000..a92f1c0
 +        return;
 +    }
 +
-+    _status_text = (_mode == MODE_GRAMMAR) ? "CHECKING..." : "ASKING...";
++    _status_text = (_mode == MODE_REWRITE)   ? "REWRITING..."
++                   : (_mode == MODE_GRAMMAR) ? "CHECKING..."
++                                             : "ASKING...";
 +
 +    // the HTTPS request. HTTPClient::begin(url) with an https URL uses
 +    // TLS without certificate pinning - same approach the Sync service
@@ -1353,20 +1407,20 @@ index 0000000..a92f1c0
 +        answer += "\n[cut off - raise max_tokens in claude.json]";
 +
 +    _answer = answer;
-+    _answer_grammar = (_mode == MODE_GRAMMAR);
++    _answer_grammar = (_mode != MODE_CONVERSATION);
 +    _answer_ready = true;
 +    _status_text = "";
 +    _state = ASK_IDLE;
 +}
 +
-+// display side: snapshot the buffer and hand the work to the background core
-+static void askclaude_queue(int mode, const char *statusText)
++// display side: snapshot the text and hand the work to the background core
++static void askclaude_queue(int mode, const char *statusText, const char *text)
 +{
 +    if (_state == ASK_BUSY)
 +        return;
 +
 +    // snapshot now so typing during the request can't tear the prompt
-+    _prompt = Editor::getInstance().buffer;
++    _prompt = text ? text : Editor::getInstance().buffer;
 +    _mode = mode;
 +    _answer_ready = false;
 +    _status_text = statusText;
@@ -1378,8 +1432,16 @@ index 0000000..a92f1c0
 +    _log("[askclaude] request queued, mode %d (%d bytes)\n", mode, _prompt.length());
 +}
 +
-+void askclaude_request() { askclaude_queue(MODE_CONVERSATION, "ASKING..."); }
-+void askclaude_grammar_request() { askclaude_queue(MODE_GRAMMAR, "CHECKING..."); }
++void askclaude_request()
++{
++    askclaude_queue(MODE_CONVERSATION, "ASKING...", nullptr);
++}
++
++void askclaude_review_request(const char *text, bool rewrite)
++{
++    askclaude_queue(rewrite ? MODE_REWRITE : MODE_GRAMMAR,
++                    rewrite ? "REWRITING..." : "CHECKING...", text);
++}
 +
 +// background core: pick up the queued request (same pattern as sync_loop)
 +void askclaude_loop()
@@ -1401,10 +1463,10 @@ index 0000000..a92f1c0
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
 new file mode 100644
-index 0000000..ae21fb8
+index 0000000..c02ec6f
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,39 @@
 +#pragma once
 +
 +#include <Arduino.h>
@@ -1432,7 +1494,9 @@ index 0000000..ae21fb8
 +
 +// display side
 +void askclaude_request();             // conversation: buffer is turns split by ---
-+void askclaude_grammar_request();     // grammar check: buffer is the text to review
++// grammar review of the given text (a selection or a whole file):
++// rewrite=false lists the issues, rewrite=true returns corrected text
++void askclaude_review_request(const char *text, bool rewrite);
 +int askclaude_status();               // ASK_IDLE / ASK_BUSY / ASK_ERROR
 +const char *askclaude_status_text();  // short text for the status bar
 +void askclaude_clear_error();         // dismiss an error state
@@ -1443,7 +1507,7 @@ index 0000000..ae21fb8
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..0325508 100644
+index 45f7e4a..f1834ea 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
@@ -1622,7 +1686,7 @@ index 45f7e4a..0325508 100644
 +    // don't implement them must not type them as characters)
 +    if (key == 0 || key == 1 || key == 27 || key == MENU ||
 +        key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE || key == KEY_ASK_SEND ||
-+        key == KEY_GRAMMAR)
++        key == KEY_GRAMMAR || key == KEY_REWRITE)
          return;
  
      //
@@ -2352,10 +2416,10 @@ index 45f7e4a..0325508 100644
 +    updateScreen();
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..d0e3c12 100644
+index 15a36fe..7b0b98a 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,78 @@
+@@ -16,6 +16,80 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -2416,9 +2480,11 @@ index 15a36fe..d0e3c12 100644
 +#define KEY_UNDO 2124
 +#define KEY_REDO 2125
 +
-+// Ctrl/GUI + Shift + G (Rev 8): grammar-check the current file. Handled by
-+// the display layer like the other overlay keys.
++// Ctrl/GUI + G (Rev 8): grammar-check the selection or the current file;
++// Ctrl/GUI + Shift + G: rewrite it with corrected grammar. Handled by the
++// display layer like the other overlay keys.
 +#define KEY_GRAMMAR 2126
++#define KEY_REWRITE 2129
 +
 +// Ctrl/GUI + B / I (Rev 8): wrap the selection in markdown emphasis
 +// markers (**bold**, *italic*). The RLCD renderer styles the marked text.
@@ -2434,7 +2500,7 @@ index 15a36fe..d0e3c12 100644
  //
  class Editor
  {
-@@ -117,6 +189,11 @@ public:
+@@ -117,6 +191,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -2446,7 +2512,7 @@ index 15a36fe..d0e3c12 100644
      //
      bool savingInProgress = false;
  
-@@ -138,18 +215,75 @@ public:
+@@ -138,18 +217,75 @@ public:
      void removeLastChar();
      void removeCharAtCursor();
      void removeLastWord();
@@ -2522,7 +2588,7 @@ index 15a36fe..d0e3c12 100644
      //
      void updateScreen();
  
-@@ -170,4 +304,39 @@ public:
+@@ -170,4 +306,39 @@ public:
  private:
      // Private constructor to prevent instantiation
      Editor() {}
