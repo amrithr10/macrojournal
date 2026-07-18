@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..42c8c2d 100644
+index bade544..90374e5 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -277,12 +277,53 @@ index bade544..42c8c2d 100644
      //
      JsonDocument &app = status();
  
-@@ -306,19 +433,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -304,20 +431,162 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ }
+ 
  //
- void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
+-void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
++// Markdown emphasis state machine: advance bold/italic over [from, to).
++// "**" toggles bold, "*" toggles italic. Turning ON requires the next
++// character to be printable (not space/newline/end) so a lone star in
++// running text doesn't italicize the rest of the line; turning OFF is
++// unconditional. Both states reset at a newline. `from`/`to` point into
++// the NUL-terminated editor buffer, so peeking one character past `to`
++// is safe.
++static void WP_md_scan(const char *from, const char *to, bool &bold, bool &italic)
  {
 -    char *line = Editor::getInstance().linePositions[line_num];
 -    int length = Editor::getInstance().lineLengths[line_num];
++    const char *p = from;
++    while (p < to)
++    {
++        char c = *p;
++        if (c == '\n')
++        {
++            bold = false;
++            italic = false;
++            p++;
++        }
++        else if (c == '*')
++        {
++            bool dbl = p[1] == '*';
++            int mlen = dbl ? 2 : 1;
++            bool &state = dbl ? bold : italic;
++            if (state)
++                state = false;
++            else if (p[mlen] != ' ' && p[mlen] != '\n' && p[mlen] != '\0')
++                state = true;
++            p += mlen;
++        }
++        else
++            p++;
++    }
++}
+ 
+-    // render - the buffer holds UTF-8 and the u8g2 print pipeline decodes
+-    // multi-byte characters itself, so bytes stream straight through
+-    for (int i = 0; i < length; i++)
++void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
++{
 +    Editor &editor = Editor::getInstance();
 +    char *line = editor.linePositions[line_num];
 +    int length = editor.lineLengths[line_num];
@@ -297,16 +338,40 @@ index bade544..42c8c2d 100644
 +        selEnd = editor.selectionEnd();
 +    }
 +    int lineStart = line - editor.buffer;
- 
-     // render - the buffer holds UTF-8 and the u8g2 print pipeline decodes
-     // multi-byte characters itself, so bytes stream straight through
++
++    // markdown context: styles are per-paragraph, so walk back to the
++    // paragraph start (after the previous newline) to learn the quote flag
++    // and the emphasis state this display line begins with
++    const char *para = line;
++    while (para > editor.buffer && para[-1] != '\n')
++        para--;
++    bool quote = (*para == '>');
++    bool bold = false, italic = false;
++    WP_md_scan(para, line, bold, italic);
++
++    int ty = u8->getCursorY();
++
++    // quoted paragraphs get a vertical bar in the left margin, on every
++    // wrapped display line of the paragraph
++    if (quote)
++        display->drawFilledRectangle(0, ty - wp_font->lineHeight + 4, 2, ty + 4, 1);
++
++    // render character-wise: the emphasis state machine needs marker
++    // lookahead, and bold double-strike must re-print whole UTF-8
++    // characters, so bytes can't just stream through anymore
 +    bool inverse = false;
-     for (int i = 0; i < length; i++)
++    int i = 0;
++    while (i < length)
      {
-         char value = *(line + i);
+-        char value = *(line + i);
++        char value = line[i];
          if (value == '\n')
++        {
++            i++;
              continue;
++        }
  
+-        u8->print(value);
 +        bool selected = selStart >= 0 &&
 +                        lineStart + i >= selStart &&
 +                        lineStart + i < selEnd;
@@ -328,8 +393,48 @@ index bade544..42c8c2d 100644
 +            inverse = selected;
 +        }
 +
-         u8->print(value);
-     }
++        // emphasis markers: toggle state, draw the stars unstyled
++        if (value == '*')
++        {
++            bool dbl = (i + 1 < length) && line[i + 1] == '*';
++            int mlen = dbl ? 2 : 1;
++            bool &state = dbl ? bold : italic;
++            if (state)
++                state = false;
++            else if (line[mlen + i] != ' ' && line[mlen + i] != '\n' && line[mlen + i] != '\0')
++                state = true;
++
++            for (int k = 0; k < mlen; k++)
++                u8->print(line[i + k]);
++            i += mlen;
++            continue;
++        }
++
++        // one whole UTF-8 character (continuation bytes have 10xxxxxx)
++        int clen = 1;
++        while (i + clen < length && (line[i + clen] & 0xC0) == 0x80)
++            clen++;
++
++        int x0 = u8->getCursorX();
++        for (int k = 0; k < clen; k++)
++            u8->print(line[i + k]);
++        int x1 = u8->getCursorX();
++
++        // bold: double-strike the character 1px to the right
++        if (bold && x1 > x0)
++        {
++            u8->setCursor(x0 + 1, ty);
++            for (int k = 0; k < clen; k++)
++                u8->print(line[i + k]);
++            u8->setCursor(x1, ty);
++        }
++
++        // italic: underline just below the baseline
++        if (italic && x1 > x0)
++            display->drawLine(x0, ty + 2, x1 - 1, ty + 2, inverse ? 0 : 1);
++
++        i += clen;
++    }
 +
 +    // restore normal drawing state for the next line / status bar.
 +    // bg must go back to 0: setFont() re-enables background drawing on
@@ -340,11 +445,10 @@ index bade544..42c8c2d 100644
 +        u8->setFontMode(1);
 +        u8->setForegroundColor(1);
 +        u8->setBackgroundColor(0);
-+    }
+     }
  }
  
- //
-@@ -382,11 +554,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +651,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -366,7 +470,7 @@ index bade544..42c8c2d 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +583,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +680,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -375,7 +479,7 @@ index bade544..42c8c2d 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +595,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +692,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -390,7 +494,7 @@ index bade544..42c8c2d 100644
  }
  
  //
-@@ -478,6 +666,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +763,10 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -401,7 +505,7 @@ index bade544..42c8c2d 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +678,89 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +775,89 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -496,7 +600,7 @@ index bade544..42c8c2d 100644
          }
      }
  
-@@ -505,6 +772,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +869,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -566,7 +670,7 @@ index dc0b18b..f2edd94 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..572b1e9 100644
+index d8832fa..5d1dc98 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -640,7 +744,7 @@ index d8832fa..572b1e9 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,87 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,93 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -666,6 +770,12 @@ index d8832fa..572b1e9 100644
 +        // Ctrl/GUI + Shift + G runs a grammar check on the current file
 +        if (letter == 'g' && _shift_pressed)
 +            return KEY_GRAMMAR;
++
++        // Ctrl/GUI + B / I wrap the selection in bold/italic markers
++        if (letter == 'b')
++            return KEY_BOLD;
++        if (letter == 'i')
++            return KEY_ITALIC;
 +#endif
 +        if (letter == 'c')
 +            return KEY_COPY;
@@ -728,7 +838,7 @@ index d8832fa..572b1e9 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +386,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +392,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -742,7 +852,7 @@ index d8832fa..572b1e9 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..76c786b 100644
+index aa3d65d..1805b8c 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -769,7 +879,7 @@ index aa3d65d..76c786b 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,83 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,89 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -843,6 +953,12 @@ index aa3d65d..76c786b 100644
 +
 +        else if (key == "GRAMMAR")
 +            return KEY_GRAMMAR;
++
++        else if (key == "BOLD")
++            return KEY_BOLD;
++
++        else if (key == "ITALIC")
++            return KEY_ITALIC;
 +
 +        else if (key == "UNDO")
 +            return KEY_UNDO;
@@ -1327,7 +1443,7 @@ index 0000000..ae21fb8
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..d50e30b 100644
+index 45f7e4a..0325508 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
@@ -1706,7 +1822,7 @@ index 45f7e4a..d50e30b 100644
                      }
                      else
                      {
-@@ -1025,11 +1259,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1259,110 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -1776,6 +1892,14 @@ index 45f7e4a..d50e30b 100644
 +        }
 +
 +        //////////////////////////
++        // EMPHASIS MARKERS (Ctrl+B / Ctrl+I)
++        //////////////////////////
++        else if (key == KEY_BOLD || key == KEY_ITALIC)
++        {
++            wrapSelection(key == KEY_BOLD ? "**" : "*");
++        }
++
++        //////////////////////////
 +        // CLIPBOARD
 +        //////////////////////////
 +        // inert unless the display renders selection - see selectionSupported
@@ -1809,7 +1933,7 @@ index 45f7e4a..d50e30b 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1284,6 +1609,7 @@ void Editor::addChar(int c)
+@@ -1284,6 +1617,7 @@ void Editor::addChar(int c)
          cursorPos += len;
          buffer[bufferSize + len] = '\0';
  
@@ -1817,7 +1941,7 @@ index 45f7e4a..d50e30b 100644
          _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
      }
  }
-@@ -1311,6 +1637,7 @@ void Editor::removeLastChar()
+@@ -1311,6 +1645,7 @@ void Editor::removeLastChar()
          buffer[bufferSize - len] = 0;
          cursorPos = start;
  
@@ -1825,7 +1949,7 @@ index 45f7e4a..d50e30b 100644
          bufferSize = getBufferSize();
          _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
      }
-@@ -1333,6 +1660,7 @@ void Editor::removeCharAtCursor()
+@@ -1333,6 +1668,7 @@ void Editor::removeCharAtCursor()
  
          // Null terminate the buffer
          buffer[bufferSize - len] = '\0';
@@ -1833,7 +1957,7 @@ index 45f7e4a..d50e30b 100644
      }
  }
  
-@@ -1348,6 +1676,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1684,167 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1958,10 +2082,50 @@ index 45f7e4a..d50e30b 100644
 +    _debug("Editor::paste %d bytes at %d\n", len, cursorPos - len);
 +}
 +
++// Wrap the selection in emphasis markers ("**" bold, "*" italic). With no
++// selection, insert an empty marker pair and leave the cursor between the
++// markers, ready to type styled text.
++void Editor::wrapSelection(const char *marker)
++{
++    int mlen = strlen(marker);
++    int bufferSize = getBufferSize();
++    if (bufferSize + 2 * mlen >= (int)sizeof(buffer) - 1)
++        return;
++
++    composer.reset();
++
++    int start = cursorPos;
++    int end = cursorPos;
++    bool hadSelection = hasSelection();
++    if (hadSelection)
++    {
++        start = selectionStart();
++        end = selectionEnd();
++    }
++
++    // insert the closing marker first so the start offset stays valid
++    memmove(buffer + end + mlen, buffer + end, bufferSize - end + 1); // +1 NUL
++    memcpy(buffer + end, marker, mlen);
++    bufferSize += mlen;
++    memmove(buffer + start + mlen, buffer + start, bufferSize - start + 1);
++    memcpy(buffer + start, marker, mlen);
++
++    // after wrapping a selection the cursor lands after the closing marker;
++    // with no selection it lands between the pair
++    cursorPos = hadSelection ? end + 2 * mlen : start + mlen;
++
++    clearSelection();
++    saved = false;
++    markDirty();
++    selectionChanged = true; // markers appear mid-line - full repaint
++
++    _debug("Editor::wrapSelection '%s' at %d..%d\n", marker, start, end);
++}
++
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1378,6 +1827,224 @@ void Editor::removeLastWord()
+@@ -1378,6 +1875,224 @@ void Editor::removeLastWord()
  
      cursorPos = getBufferSize();
  
@@ -2188,10 +2352,10 @@ index 45f7e4a..d50e30b 100644
 +    updateScreen();
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..52d3560 100644
+index 15a36fe..d0e3c12 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,73 @@
+@@ -16,6 +16,78 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -2256,6 +2420,11 @@ index 15a36fe..52d3560 100644
 +// the display layer like the other overlay keys.
 +#define KEY_GRAMMAR 2126
 +
++// Ctrl/GUI + B / I (Rev 8): wrap the selection in markdown emphasis
++// markers (**bold**, *italic*). The RLCD renderer styles the marked text.
++#define KEY_BOLD 2127
++#define KEY_ITALIC 2128
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -2265,7 +2434,7 @@ index 15a36fe..52d3560 100644
  //
  class Editor
  {
-@@ -117,6 +184,11 @@ public:
+@@ -117,6 +189,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -2277,7 +2446,7 @@ index 15a36fe..52d3560 100644
      //
      bool savingInProgress = false;
  
-@@ -138,18 +210,74 @@ public:
+@@ -138,18 +215,75 @@ public:
      void removeLastChar();
      void removeCharAtCursor();
      void removeLastWord();
@@ -2334,6 +2503,7 @@ index 15a36fe..52d3560 100644
 +    void copySelection();
 +    void cutSelection();
 +    void paste();
++    void wrapSelection(const char *marker); // Ctrl+B / Ctrl+I markers
 +
 +    // Clipboard content, NUL-terminated UTF-8
 +    char clipboard[CLIPBOARD_SIZE] = {0};
@@ -2352,7 +2522,7 @@ index 15a36fe..52d3560 100644
      //
      void updateScreen();
  
-@@ -170,4 +298,39 @@ public:
+@@ -170,4 +304,39 @@ public:
  private:
      // Private constructor to prevent instantiation
      Editor() {}

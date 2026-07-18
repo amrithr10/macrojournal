@@ -26,6 +26,13 @@ Ctrl+Shift+↑/↓: line · Shift+Home/End: to line start/end · Ctrl+A: all.
 **Clipboard** — Ctrl+C / X / V: copy / cut / paste (2 KB clipboard,
 UTF-8 safe). Ctrl+Backspace deletes the word left of the cursor.
 
+**Formatting (markdown-styled)** — files stay plain text; the Rev 8 screen
+styles markdown as you type: `**bold**` renders bold (double-strike),
+`*italic*` renders underlined, and `> quote` paragraphs get a bar in the
+left margin. Ctrl+B / Ctrl+I wrap the current selection in markers (or
+insert an empty pair to type into). Markers stay visible; emphasis resets
+at each newline.
+
 **Undo / redo** — Ctrl+Z undo, Ctrl+Y redo. Bursts of typing collapse into
 one step (a ~0.6 s pause marks the boundary); up to 10 steps are kept. The
 history is per-file and per-window — it resets when you switch files or
