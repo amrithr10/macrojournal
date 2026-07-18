@@ -38,6 +38,11 @@ one step (a ~0.6 s pause marks the boundary); up to 10 steps are kept. The
 history is per-file and per-window — it resets when you switch files or
 page across the 8 KB window boundary.
 
+**Dark mode** — `[I] DARK MODE` on the main menu toggles hardware panel
+inversion (white text on black). Persisted in config, survives reboots;
+everything (bold, underline, selection, quote bars) renders inverted
+automatically.
+
 **To-do scratchpad** — Ctrl+Shift+N from the editor or the menu opens a
 plain-text scratchpad (status bar shows `TODO`); ESC saves it and returns
 to the file you were in. The scratchpad is hidden file slot 10 — it lives

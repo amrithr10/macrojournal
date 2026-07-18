@@ -42,18 +42,19 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..d7a67e4 100644
+index 966d565..eac69df 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,8 @@
  
  //
  #include "service/Editor/Editor.h"
 +#include "../../WordProcessor/WordProcessor.h"
++#include "../../display_RLCD.h"
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -39,6 +40,12 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -39,10 +41,18 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->println(" [S] SYNC ");
      }
  
@@ -66,7 +67,13 @@ index 966d565..d7a67e4 100644
      u8->println(" [W] WIFI");
      u8->println(" [L] LANGUAGE");
      u8->println(" [T] BLE KEYBOARD");
-@@ -82,6 +89,13 @@ void Home_keyboard(char key)
+     u8->println(" [U] DRIVE MODE");
++    u8->printf(" [I] DARK MODE: %s\n",
++               app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
+ 
+     u8->println();
+     u8->println(" [B] BACK ");
+@@ -82,6 +92,22 @@ void Home_keyboard(char key)
          }
      }
  
@@ -75,6 +82,15 @@ index 966d565..d7a67e4 100644
 +        // open the Ask Claude screen (only if configured)
 +        if (gfs()->exists("/claude.json"))
 +            WP_requestAskClaude();
++    }
++
++    else if (key == 'I' || key == 'i')
++    {
++        // toggle dark mode (hardware panel inversion), persisted in config
++        bool dark = !app["config"]["darkmode"].as<bool>();
++        app["config"]["darkmode"] = dark;
++        config_save();
++        display_RLCD_dark(dark);
 +    }
 +
      else if (key == 'D' || key == 'd')
@@ -660,7 +676,7 @@ index 718c49d..86b69c0 100644
  String formatNumberWithCommas(long num);
  
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
-index dc0b18b..f2edd94 100644
+index dc0b18b..7d5ed66 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.cpp
 @@ -13,6 +13,9 @@ const ST73xxPins PINS{PIN_DC, PIN_CS, PIN_SCLK, PIN_MOSI, PIN_RST};
@@ -673,7 +689,20 @@ index dc0b18b..f2edd94 100644
  // screens
  #include "ErrorScreen/ErrorScreen.h"
  #include "WordProcessor/WordProcessor.h"
-@@ -176,6 +179,22 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
+@@ -59,7 +62,11 @@ void display_RLCD_setup()
+   display.initialize();
+   display.High_Power_Mode();
+   display.display_on(true);
+-  display.display_Inversion(false);
++
++  // dark mode is a hardware panel inversion - restore the saved setting
++  // (config is loaded by app_setup before the display comes up)
++  display.display_Inversion(status()["config"]["darkmode"].as<bool>());
++
+   display.clearDisplay();
+ 
+   // connect u8g2 procedures to TFT_eSPI
+@@ -176,6 +183,22 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
    JsonDocument &app = status();
    int screen = app["screen"].as<int>();
  
@@ -696,6 +725,30 @@ index dc0b18b..f2edd94 100644
    if (screen == ERRORSCREEN)
    {
      if (!pressed)
+@@ -207,6 +230,12 @@ void display_RLCD_keyboard(int key, bool pressed, int index)
+   }
+ }
+ 
++// toggle the panel's hardware inversion (dark mode)
++void display_RLCD_dark(bool enabled)
++{
++  display.display_Inversion(enabled);
++}
++
+ void display_RLCD_keyboard_report(uint8_t modifier, uint8_t reserved, uint8_t *keycodes)
+ {
+   JsonDocument &app = status();
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.h b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.h
+index bf924ce..f0ad0f5 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.h
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/display_RLCD.h
+@@ -11,3 +11,6 @@ int display_RLCD_core();
+ 
+ //
+ void display_RLCD_keyboard(int key, bool pressed, int index = -1);
++
++// dark mode: hardware panel inversion (white text on black)
++void display_RLCD_dark(bool enabled);
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 index d8832fa..c8d6231 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
