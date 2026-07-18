@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..932dc6e 100644
+index bade544..42c8c2d 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -92,7 +92,7 @@ index bade544..932dc6e 100644
  
  //
  int STATUSBAR_Y = 295;
-@@ -44,6 +45,78 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+@@ -44,6 +45,79 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
  // active font, selected in WP_setup from config "font"
  static EditorFont *wp_font = &WP_FONTS[0];
  
@@ -105,6 +105,7 @@ index bade544..932dc6e 100644
 +static int overlay_prev_index = -1;
 +#define SCRATCH_FILE_INDEX 10
 +#define ASK_FILE_INDEX 11
++#define GRAMMAR_FILE_INDEX 12
 +
 +// Swap to an overlay file, remembering where the writer was. Switching
 +// between overlays keeps the original return file.
@@ -171,7 +172,7 @@ index bade544..932dc6e 100644
  // layout derived from the active font metrics in WP_setup
  static int editY = 264;   // baseline of the edit line
  static int cursorY = 270; // top of the cursor band under the edit line
-@@ -91,6 +164,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -91,6 +165,10 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -182,33 +183,48 @@ index bade544..932dc6e 100644
      // load file from the editor
      int file_index = app["config"]["file_index"].as<int>();
      Editor::getInstance().loadFile(format("/%d.txt", file_index));
-@@ -119,6 +196,25 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -119,6 +197,40 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // timers
      WP_check_saved();
  
-+    // a finished Ask Claude answer is injected while the ask screen is
++    // a finished answer is injected while its destination screen is
 +    // showing; otherwise it stays pending until the writer returns to it
-+    if (askclaude_answer_ready() &&
-+        status()["config"]["file_index"].as<int>() == ASK_FILE_INDEX)
++    if (askclaude_answer_ready())
 +    {
-+        String answer = askclaude_take_answer();
++        int target = askclaude_answer_is_grammar() ? GRAMMAR_FILE_INDEX
++                                                   : ASK_FILE_INDEX;
++        if (status()["config"]["file_index"].as<int>() == target)
++        {
++            String answer = askclaude_take_answer();
 +
-+        // separator, answer, separator - ready for the next question
-+        WP_appendToBuffer("\n---\n");
-+        WP_appendToBuffer(answer.c_str());
-+        WP_appendToBuffer("\n---\n");
++            if (target == GRAMMAR_FILE_INDEX)
++            {
++                // a fresh report replaces the previous one
++                Editor::getInstance().resetBuffer();
++                Editor::getInstance().cursorPos = 0;
++                Editor::getInstance().clearSelection();
++                WP_appendToBuffer(answer.c_str());
++            }
++            else
++            {
++                // separator, answer, separator - ready for the next question
++                WP_appendToBuffer("\n---\n");
++                WP_appendToBuffer(answer.c_str());
++                WP_appendToBuffer("\n---\n");
++            }
 +
-+        // persist the exchange right away
-+        Editor::getInstance().saveFile();
++            // persist right away
++            Editor::getInstance().saveFile();
 +
-+        display->clearDisplay();
-+        clear_background = true;
++            display->clearDisplay();
++            clear_background = true;
++        }
 +    }
 +
      // CLEAR BACKGROUND
      WP_render_clear(display, u8);
  
-@@ -161,6 +257,8 @@ bool WP_contentChanged()
+@@ -161,6 +273,8 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
@@ -217,7 +233,7 @@ index bade544..932dc6e 100644
  
      JsonDocument &app = status();
  
-@@ -170,6 +268,7 @@ bool WP_contentChanged()
+@@ -170,6 +284,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -225,7 +241,7 @@ index bade544..932dc6e 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,7 +279,9 @@ bool WP_contentChanged()
+@@ -180,7 +295,9 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
@@ -236,7 +252,7 @@ index bade544..932dc6e 100644
  
      cursorPos_prev = cursorPos;
      cursorLinePos_prev = cursorLinePos;
-@@ -188,7 +289,9 @@ bool WP_contentChanged()
+@@ -188,7 +305,9 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
@@ -246,7 +262,7 @@ index bade544..932dc6e 100644
  
      return changed;
  }
-@@ -244,6 +347,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +363,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -261,7 +277,7 @@ index bade544..932dc6e 100644
      //
      JsonDocument &app = status();
  
-@@ -306,19 +417,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -306,19 +433,64 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  //
  void WP_render_line(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8, int line_num)
  {
@@ -328,7 +344,7 @@ index bade544..932dc6e 100644
  }
  
  //
-@@ -382,11 +538,17 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +554,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -343,12 +359,14 @@ index bade544..932dc6e 100644
 +        u8->printf("TODO ");
 +    else if (file_index == ASK_FILE_INDEX)
 +        u8->printf("ASK ");
++    else if (file_index == GRAMMAR_FILE_INDEX)
++        u8->printf("GRAMMAR ");
 +    else
 +        u8->printf("FILE %d ", file_index);
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +565,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +583,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -357,7 +375,7 @@ index bade544..932dc6e 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +577,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +595,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -372,7 +390,7 @@ index bade544..932dc6e 100644
  }
  
  //
-@@ -478,6 +648,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +666,10 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -383,7 +401,7 @@ index bade544..932dc6e 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +660,72 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +678,89 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -440,6 +458,23 @@ index bade544..932dc6e 100644
 +        }
 +    }
 +
++    // Ctrl+Shift+G: grammar-check the current file. The text is snapshotted
++    // before the overlay swap, and the report lands in the GRAMMAR overlay.
++    else if (key == KEY_GRAMMAR)
++    {
++        if (!pressed &&
++            app["config"]["file_index"].as<int>() != GRAMMAR_FILE_INDEX &&
++            Editor::getInstance().getBufferSize() > 0 &&
++            askclaude_status() != ASK_BUSY)
++        {
++            _log("Grammar check requested\n");
++
++            Editor::getInstance().saveFile();
++            askclaude_grammar_request(); // snapshots the current buffer
++            WP_openOverlay(GRAMMAR_FILE_INDEX);
++        }
++    }
++
 +    // Shift+Enter: send the prompt on the ask screen; a plain newline
 +    // everywhere else
 +    else if (key == KEY_ASK_SEND)
@@ -461,7 +496,7 @@ index bade544..932dc6e 100644
          }
      }
  
-@@ -505,6 +737,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +772,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -531,7 +566,7 @@ index dc0b18b..f2edd94 100644
    {
      if (!pressed)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..863cb44 100644
+index d8832fa..572b1e9 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -605,7 +640,7 @@ index d8832fa..863cb44 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +294,83 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +294,87 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -627,6 +662,10 @@ index d8832fa..863cb44 100644
 +        // the plain-copy mapping; copy stays on Ctrl+C without shift)
 +        if (letter == 'c' && _shift_pressed)
 +            return KEY_ASK_CLAUDE;
++
++        // Ctrl/GUI + Shift + G runs a grammar check on the current file
++        if (letter == 'g' && _shift_pressed)
++            return KEY_GRAMMAR;
 +#endif
 +        if (letter == 'c')
 +            return KEY_COPY;
@@ -689,7 +728,7 @@ index d8832fa..863cb44 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +382,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +386,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -703,7 +742,7 @@ index d8832fa..863cb44 100644
          uint8_t hid = key_hid[e.bit.KEY];
          if (hid != 0)
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
-index aa3d65d..67a8871 100644
+index aa3d65d..76c786b 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/Keypad.cpp
 @@ -2,6 +2,9 @@
@@ -730,7 +769,7 @@ index aa3d65d..67a8871 100644
          else if (key == "ALT")
              return 17;
  
-@@ -133,6 +143,80 @@ int keypad_convert_wp_keys(String key)
+@@ -133,6 +143,83 @@ int keypad_convert_wp_keys(String key)
          else if (key == "END")
              return 3;
  
@@ -802,6 +841,9 @@ index aa3d65d..67a8871 100644
 +        else if (key == "DELETE_WORD")
 +            return KEY_DELETE_WORD;
 +
++        else if (key == "GRAMMAR")
++            return KEY_GRAMMAR;
++
 +        else if (key == "UNDO")
 +            return KEY_UNDO;
 +
@@ -813,10 +855,10 @@ index aa3d65d..67a8871 100644
  
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 new file mode 100644
-index 0000000..b157bfc
+index 0000000..a92f1c0
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
-@@ -0,0 +1,378 @@
+@@ -0,0 +1,424 @@
 +#include "AskClaude.h"
 +#include "app/app.h"
 +
@@ -838,11 +880,29 @@ index 0000000..b157bfc
 +static String _answer = "";
 +static volatile bool _answer_ready = false;
 +
++// request modes: a conversation from the ask screen, or a grammar review
++// of a snapshot of whichever file the writer was in
++#define MODE_CONVERSATION 0
++#define MODE_GRAMMAR 1
++static volatile int _mode = MODE_CONVERSATION;
++static volatile bool _answer_grammar = false;
++
 +// /claude.json
 +static String _api_key = "";
 +static String _model = "claude-opus-4-8";
 +static int _max_tokens = 1024;
 +static String _system = "";
++static String _grammar_system = "";
++
++// default reviewer instructions; override with "grammar_system" in claude.json
++static const char *GRAMMAR_SYSTEM_DEFAULT =
++    "You are a careful copy editor. The user sends a piece of writing from a "
++    "small plain-text writing device. List the grammar, spelling and "
++    "punctuation problems. For each issue, on its own numbered line: quote "
++    "the problem phrase, say in a few words what is wrong, then give the "
++    "corrected phrase. Plain text only - no markdown. Skip sentences that "
++    "are fine. End with one short line on overall quality. If there are no "
++    "issues, just say the text looks clean.";
 +
 +//
 +int askclaude_status() { return _state; }
@@ -853,6 +913,7 @@ index 0000000..b157bfc
 +        _state = ASK_IDLE;
 +}
 +bool askclaude_answer_ready() { return _answer_ready; }
++bool askclaude_answer_is_grammar() { return _answer_grammar; }
 +String askclaude_take_answer()
 +{
 +    _answer_ready = false;
@@ -897,6 +958,7 @@ index 0000000..b157bfc
 +    _model = doc["model"] | "claude-opus-4-8";
 +    _max_tokens = doc["max_tokens"] | 1024;
 +    _system = doc["system"] | "";
++    _grammar_system = doc["grammar_system"] | GRAMMAR_SYSTEM_DEFAULT;
 +
 +    if (_api_key.length() < 10)
 +    {
@@ -1055,7 +1117,7 @@ index 0000000..b157bfc
 +// the blocking worker - runs on the background core
 +static void ask_run()
 +{
-+    _status_text = "ASKING (WIFI)...";
++    _status_text = (_mode == MODE_GRAMMAR) ? "CHECKING (WIFI)..." : "ASKING (WIFI)...";
 +
 +    if (!ask_load_config())
 +        return;
@@ -1065,11 +1127,32 @@ index 0000000..b157bfc
 +    JsonDocument requestDoc;
 +    requestDoc["model"] = _model;
 +    requestDoc["max_tokens"] = _max_tokens;
-+    if (_system.length() > 0)
-+        requestDoc["system"] = _system;
 +    JsonArray messages = requestDoc["messages"].to<JsonArray>();
-+    if (!ask_build_messages(messages))
-+        return;
++
++    if (_mode == MODE_GRAMMAR)
++    {
++        // one user turn: the text under review; the reviewer role comes
++        // from the grammar system prompt
++        String text = _prompt;
++        text.trim();
++        if (text.length() == 0)
++        {
++            ask_fail("NOTHING TO CHECK");
++            return;
++        }
++
++        requestDoc["system"] = _grammar_system;
++        JsonObject msg = messages.add<JsonObject>();
++        msg["role"] = "user";
++        msg["content"] = text;
++    }
++    else
++    {
++        if (_system.length() > 0)
++            requestDoc["system"] = _system;
++        if (!ask_build_messages(messages))
++            return;
++    }
 +
 +    String body;
 +    serializeJson(requestDoc, body);
@@ -1085,7 +1168,7 @@ index 0000000..b157bfc
 +        return;
 +    }
 +
-+    _status_text = "ASKING...";
++    _status_text = (_mode == MODE_GRAMMAR) ? "CHECKING..." : "ASKING...";
 +
 +    // the HTTPS request. HTTPClient::begin(url) with an https URL uses
 +    // TLS without certificate pinning - same approach the Sync service
@@ -1154,28 +1237,33 @@ index 0000000..b157bfc
 +        answer += "\n[cut off - raise max_tokens in claude.json]";
 +
 +    _answer = answer;
++    _answer_grammar = (_mode == MODE_GRAMMAR);
 +    _answer_ready = true;
 +    _status_text = "";
 +    _state = ASK_IDLE;
 +}
 +
 +// display side: snapshot the buffer and hand the work to the background core
-+void askclaude_request()
++static void askclaude_queue(int mode, const char *statusText)
 +{
 +    if (_state == ASK_BUSY)
 +        return;
 +
 +    // snapshot now so typing during the request can't tear the prompt
 +    _prompt = Editor::getInstance().buffer;
++    _mode = mode;
 +    _answer_ready = false;
-+    _status_text = "ASKING...";
++    _status_text = statusText;
 +    _state = ASK_BUSY;
 +
 +    JsonDocument &app = status();
 +    app["task"] = "ask_claude";
 +
-+    _log("[askclaude] request queued (%d bytes)\n", _prompt.length());
++    _log("[askclaude] request queued, mode %d (%d bytes)\n", mode, _prompt.length());
 +}
++
++void askclaude_request() { askclaude_queue(MODE_CONVERSATION, "ASKING..."); }
++void askclaude_grammar_request() { askclaude_queue(MODE_GRAMMAR, "CHECKING..."); }
 +
 +// background core: pick up the queued request (same pattern as sync_loop)
 +void askclaude_loop()
@@ -1197,10 +1285,10 @@ index 0000000..b157bfc
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
 new file mode 100644
-index 0000000..69f44c4
+index 0000000..ae21fb8
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,37 @@
 +#pragma once
 +
 +#include <Arduino.h>
@@ -1227,17 +1315,19 @@ index 0000000..69f44c4
 +#define ASK_ERROR 2
 +
 +// display side
-+void askclaude_request();             // snapshot the buffer and queue a request
++void askclaude_request();             // conversation: buffer is turns split by ---
++void askclaude_grammar_request();     // grammar check: buffer is the text to review
 +int askclaude_status();               // ASK_IDLE / ASK_BUSY / ASK_ERROR
 +const char *askclaude_status_text();  // short text for the status bar
 +void askclaude_clear_error();         // dismiss an error state
 +bool askclaude_answer_ready();        // a finished answer is waiting
++bool askclaude_answer_is_grammar();   // pending answer is a grammar report
 +String askclaude_take_answer();       // consume the pending answer
 +
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..43554d7 100644
+index 45f7e4a..d50e30b 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
@@ -1405,7 +1495,7 @@ index 45f7e4a..43554d7 100644
  }
  
  // Handle Keyboard Input
-@@ -716,8 +817,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -716,8 +817,12 @@ void Editor::keyboard(int key, bool pressed)
  {
      // ignore non printable character
      // (1 is the "consumed" sentinel from the keyboard locale layer,
@@ -1415,11 +1505,12 @@ index 45f7e4a..43554d7 100644
 +    // KEY_SCRATCHPAD/KEY_ASK_* belong to the display layer - displays that
 +    // don't implement them must not type them as characters)
 +    if (key == 0 || key == 1 || key == 27 || key == MENU ||
-+        key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE || key == KEY_ASK_SEND)
++        key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE || key == KEY_ASK_SEND ||
++        key == KEY_GRAMMAR)
          return;
  
      //
-@@ -750,11 +854,124 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +855,124 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -1545,7 +1636,7 @@ index 45f7e4a..43554d7 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +1015,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +1016,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -1560,7 +1651,7 @@ index 45f7e4a..43554d7 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +1058,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1059,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -1572,7 +1663,7 @@ index 45f7e4a..43554d7 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1071,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1072,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -1586,7 +1677,7 @@ index 45f7e4a..43554d7 100644
                  }
                  else
                  {
-@@ -858,7 +1089,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1090,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -1595,7 +1686,7 @@ index 45f7e4a..43554d7 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1101,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1102,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -1605,7 +1696,7 @@ index 45f7e4a..43554d7 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1174,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1175,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -1615,7 +1706,7 @@ index 45f7e4a..43554d7 100644
                      }
                      else
                      {
-@@ -1025,11 +1258,102 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1259,102 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -1718,7 +1809,7 @@ index 45f7e4a..43554d7 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1284,6 +1608,7 @@ void Editor::addChar(int c)
+@@ -1284,6 +1609,7 @@ void Editor::addChar(int c)
          cursorPos += len;
          buffer[bufferSize + len] = '\0';
  
@@ -1726,7 +1817,7 @@ index 45f7e4a..43554d7 100644
          _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
      }
  }
-@@ -1311,6 +1636,7 @@ void Editor::removeLastChar()
+@@ -1311,6 +1637,7 @@ void Editor::removeLastChar()
          buffer[bufferSize - len] = 0;
          cursorPos = start;
  
@@ -1734,7 +1825,7 @@ index 45f7e4a..43554d7 100644
          bufferSize = getBufferSize();
          _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
      }
-@@ -1333,6 +1659,7 @@ void Editor::removeCharAtCursor()
+@@ -1333,6 +1660,7 @@ void Editor::removeCharAtCursor()
  
          // Null terminate the buffer
          buffer[bufferSize - len] = '\0';
@@ -1742,7 +1833,7 @@ index 45f7e4a..43554d7 100644
      }
  }
  
-@@ -1348,6 +1675,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1676,127 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -1870,7 +1961,7 @@ index 45f7e4a..43554d7 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1378,6 +1826,224 @@ void Editor::removeLastWord()
+@@ -1378,6 +1827,224 @@ void Editor::removeLastWord()
  
      cursorPos = getBufferSize();
  
@@ -2097,10 +2188,10 @@ index 45f7e4a..43554d7 100644
 +    updateScreen();
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..2468d2c 100644
+index 15a36fe..52d3560 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,69 @@
+@@ -16,6 +16,73 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -2161,6 +2252,10 @@ index 15a36fe..2468d2c 100644
 +#define KEY_UNDO 2124
 +#define KEY_REDO 2125
 +
++// Ctrl/GUI + Shift + G (Rev 8): grammar-check the current file. Handled by
++// the display layer like the other overlay keys.
++#define KEY_GRAMMAR 2126
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -2170,7 +2265,7 @@ index 15a36fe..2468d2c 100644
  //
  class Editor
  {
-@@ -117,6 +180,11 @@ public:
+@@ -117,6 +184,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -2182,7 +2277,7 @@ index 15a36fe..2468d2c 100644
      //
      bool savingInProgress = false;
  
-@@ -138,18 +206,74 @@ public:
+@@ -138,18 +210,74 @@ public:
      void removeLastChar();
      void removeCharAtCursor();
      void removeLastWord();
@@ -2257,7 +2352,7 @@ index 15a36fe..2468d2c 100644
      //
      void updateScreen();
  
-@@ -170,4 +294,39 @@ public:
+@@ -170,4 +298,39 @@ public:
  private:
      // Private constructor to prevent instantiation
      Editor() {}

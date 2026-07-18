@@ -47,6 +47,14 @@ conversation context, with `---` lines separating user/assistant turns —
 so follow-ups just work; select-all + delete starts a fresh conversation.
 ESC returns to your writing.
 
+**Grammar check** — Ctrl+Shift+G in any file sends its text for review and
+switches to a `GRAMMAR` overlay (hidden slot 12) where the report lands:
+numbered issues, each quoting the phrase, what's wrong, and the fix. Your
+note is never modified — ESC returns to it. Each check replaces the
+previous report. The reviewer instructions can be overridden with a
+`grammar_system` field in `claude.json`. Uses the same WiFi/API setup as
+Ask Claude, and for files larger than 8 KB checks the loaded window.
+
 Requires: `wifi.json` (the device's normal WiFi setup) and `claude.json`
 in the drive root — `{"api_key": "sk-ant-...", "model": "claude-opus-4-8",
 "max_tokens": 1024, "system": "..."}`. `claude.json` holds a real API key
