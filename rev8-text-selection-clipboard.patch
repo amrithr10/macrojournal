@@ -81,7 +81,7 @@ index 966d565..d7a67e4 100644
      {
          // to clear file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..b8c8fbf 100644
+index bade544..28e2bc8 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,7 @@
@@ -277,7 +277,7 @@ index bade544..b8c8fbf 100644
      //
      JsonDocument &app = status();
  
-@@ -304,20 +431,162 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -304,20 +431,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  }
  
  //
@@ -420,10 +420,15 @@ index bade544..b8c8fbf 100644
 +            u8->print(line[i + k]);
 +        int x1 = u8->getCursorX();
 +
-+        // bold: double-strike the character 1px to the right
++        // bold: triple-strike the character (+1px and +2px) so stems gain
++        // 2px of weight - a single 1px double-strike reads too subtle on
++        // this panel
 +        if (bold && x1 > x0)
 +        {
 +            u8->setCursor(x0 + 1, ty);
++            for (int k = 0; k < clen; k++)
++                u8->print(line[i + k]);
++            u8->setCursor(x0 + 2, ty);
 +            for (int k = 0; k < clen; k++)
 +                u8->print(line[i + k]);
 +            u8->setCursor(x1, ty);
@@ -448,7 +453,7 @@ index bade544..b8c8fbf 100644
      }
  }
  
-@@ -382,11 +651,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +656,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -470,7 +475,7 @@ index bade544..b8c8fbf 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +680,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +685,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -479,7 +484,7 @@ index bade544..b8c8fbf 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +692,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +697,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -494,7 +499,7 @@ index bade544..b8c8fbf 100644
  }
  
  //
-@@ -478,6 +763,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +768,10 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -505,7 +510,7 @@ index bade544..b8c8fbf 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +775,111 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +780,111 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -622,7 +627,7 @@ index bade544..b8c8fbf 100644
          }
      }
  
-@@ -505,6 +891,10 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,6 +896,10 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -1512,7 +1517,7 @@ index 0000000..c02ec6f
 +// background core (called from app_loop)
 +void askclaude_loop();
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..f1834ea 100644
+index 45f7e4a..5fecd53 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -28,6 +28,9 @@ void Editor::init(int cols, int rows, const EditorFont *font)
@@ -2002,7 +2007,57 @@ index 45f7e4a..f1834ea 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1284,6 +1617,7 @@ void Editor::addChar(int c)
+@@ -1063,6 +1396,49 @@ void Editor::keyboard(int key, bool pressed)
+                 // any other character ends the composition
+                 composer.reset();
+ 
++#ifdef REV8
++                // Markdown quote continuation: Enter inside a "> " quote
++                // line carries the quote onto the new line; Enter on an
++                // EMPTY quote line ("> " and nothing else) removes the
++                // marker and ends the quote - i.e. hit Enter twice to
++                // leave a quote block.
++                if (key == '\n')
++                {
++                    int ps = cursorPos;
++                    while (ps > 0 && buffer[ps - 1] != '\n')
++                        ps--;
++
++                    if (buffer[ps] == '>')
++                    {
++                        int contentStart = ps + 1;
++                        if (buffer[contentStart] == ' ')
++                            contentStart++;
++
++                        if (contentStart >= cursorPos)
++                        {
++                            // empty quote line: delete the marker, quote ends
++                            int bufferSize = getBufferSize();
++                            memmove(buffer + ps, buffer + cursorPos,
++                                    bufferSize - cursorPos + 1);
++                            cursorPos = ps;
++                            markDirty();
++                            selectionChanged = true; // full repaint
++                        }
++                        else
++                        {
++                            // continue the quote on the new line
++                            addChar('\n');
++                            addChar('>');
++                            addChar(' ');
++                        }
++
++                        this->saved = false;
++                        updateScreen();
++                        return;
++                    }
++                }
++#endif
++
+                 //
+                 addChar(key);
+             }
+@@ -1284,6 +1660,7 @@ void Editor::addChar(int c)
          cursorPos += len;
          buffer[bufferSize + len] = '\0';
  
@@ -2010,7 +2065,7 @@ index 45f7e4a..f1834ea 100644
          _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
      }
  }
-@@ -1311,6 +1645,7 @@ void Editor::removeLastChar()
+@@ -1311,6 +1688,7 @@ void Editor::removeLastChar()
          buffer[bufferSize - len] = 0;
          cursorPos = start;
  
@@ -2018,7 +2073,7 @@ index 45f7e4a..f1834ea 100644
          bufferSize = getBufferSize();
          _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
      }
-@@ -1333,6 +1668,7 @@ void Editor::removeCharAtCursor()
+@@ -1333,6 +1711,7 @@ void Editor::removeCharAtCursor()
  
          // Null terminate the buffer
          buffer[bufferSize - len] = '\0';
@@ -2026,7 +2081,7 @@ index 45f7e4a..f1834ea 100644
      }
  }
  
-@@ -1348,6 +1684,167 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1727,167 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -2194,7 +2249,7 @@ index 45f7e4a..f1834ea 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1378,6 +1875,224 @@ void Editor::removeLastWord()
+@@ -1378,6 +1918,224 @@ void Editor::removeLastWord()
  
      cursorPos = getBufferSize();
  
