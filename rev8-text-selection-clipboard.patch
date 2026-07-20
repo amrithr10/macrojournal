@@ -42,11 +42,37 @@ index c4addfd..504906f 100644
  }
  
  // status storage
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Clear/Clear.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Clear/Clear.cpp
+index 3c572fc..33696dc 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Clear/Clear.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Clear/Clear.cpp
+@@ -34,6 +34,11 @@ void Clear_keyboard(char key)
+ {
+     JsonDocument &app = status();
+ 
++    // a clear started from the traverse mode returns to the menu, not
++    // to the freshly emptied file; consumed on any key
++    bool backToMenu = app["menu"]["clear_return_menu"].as<bool>();
++    app["menu"]["clear_return_menu"] = false;
++
+     // delete confirmed
+     if (key == 'Y' || key == 'y')
+     {
+@@ -41,7 +46,8 @@ void Clear_keyboard(char key)
+         Editor::getInstance().clearFile();
+ 
+         // go back to the word processor
+-        app["screen"] = WORDPROCESSOR;
++        if (!backToMenu)
++            app["screen"] = WORDPROCESSOR;
+     }
+ 
+     // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..c0c9ab2 100644
+index 966d565..c48334e 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,91 @@
+@@ -6,6 +6,104 @@
  
  //
  #include "service/Editor/Editor.h"
@@ -65,24 +91,35 @@ index 966d565..c0c9ab2 100644
 +// Only ESC or F turn it off.
 +static bool traverse_stick = false;
 +
-+// First line of each file, shown as its title in the file list. Loaded
-+// when the home screen opens; 10 tiny reads are instant on the FAT.
-+static char file_titles[10][18];
++// First line of each file (its title) and its content size, shown in the
++// full-width file list. Loaded when the home screen opens; 10 tiny reads
++// are instant on the FAT.
++static char file_titles[10][29];
++static uint32_t file_sizes[10];
 +
 +static void home_load_titles()
 +{
 +    for (int i = 0; i < 10; i++)
 +    {
 +        file_titles[i][0] = '\0';
++        file_sizes[i] = 0;
 +
 +        String path = format("/%d.txt", i);
 +        if (!gfs()->exists(path.c_str()))
 +            continue;
 +
-+        // protected files never leak their first line
++        // protected files never leak their first line; their size is
++        // reported without the encryption header
 +        if (crypt_is_encrypted(path.c_str()))
 +        {
 +            strcpy(file_titles[i], "LOCKED");
++            File locked = gfs()->open(path.c_str(), "r");
++            if (locked)
++            {
++                uint32_t sz = locked.size();
++                locked.close();
++                file_sizes[i] = sz > 56 ? sz - 56 : 0;
++            }
 +            continue;
 +        }
 +
@@ -90,7 +127,9 @@ index 966d565..c0c9ab2 100644
 +        if (!file)
 +            continue;
 +
-+        char raw[64];
++        file_sizes[i] = file.size();
++
++        char raw[96];
 +        int n = file.read((uint8_t *)raw, sizeof(raw) - 1);
 +        file.close();
 +        if (n <= 0)
@@ -117,7 +156,7 @@ index 966d565..c0c9ab2 100644
 +            if (out + len > (int)sizeof(file_titles[0]) - 1)
 +                break;
 +
-+            // the 64-byte probe may end mid-character - stop cleanly
++            // the 96-byte probe may end mid-character - stop cleanly
 +            bool complete = true;
 +            for (int k = 1; k < len; k++)
 +                if (((uint8_t)psrc[k] & 0xC0) != 0x80)
@@ -138,7 +177,7 @@ index 966d565..c0c9ab2 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,6 +101,20 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,54 +114,98 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -158,83 +197,120 @@ index 966d565..c0c9ab2 100644
 +        traverse = -1;
  }
  
- //
-@@ -39,10 +138,24 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-         u8->println(" [S] SYNC ");
-     }
+-//
++// The home screen is a full-width file list with a key legend at the
++// bottom; everything else lives in the [C] CONFIG sub-screen.
+ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ {
+     JsonDocument &app = status();
  
-+    // Grammana Z (the LLM assistant) - only once claude.json is present
-+    if (gfs()->exists("/claude.json"))
+-    //
+-    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
+-    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
+-        keyboard_layout = "US";
++    int file_index = app["config"]["file_index"].as<int>();
++    for (int i = 0; i < 10; i++)
 +    {
-+        u8->println(" [G] GRAMMANA Z");
-+    }
-+
-     u8->println(" [W] WIFI");
-     u8->println(" [L] LANGUAGE");
-     u8->println(" [T] BLE KEYBOARD");
-     u8->println(" [U] DRIVE MODE");
-+    u8->printf(" [I] DARK MODE: %s\n",
-+               app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
-+    u8->println(" [F] SELECT FILE");
-+    u8->printf(" [P] PASSWORD: %s\n",
-+               crypt_is_encrypted(
-+                   format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
-+                   ? "ON"
-+                   : "OFF");
- 
-     u8->println();
-     u8->println(" [B] BACK ");
-@@ -50,16 +163,44 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-     // File Selection
-     int pos_x = 190;
-     u8->setCursor(pos_x, 45);
--    u8->print("CHOOSE A FILE");
-+    if (traverse >= 0)
-+        u8->print("ENTER OPEN D CLR P PWD");
-+    else
-+        u8->print("CHOOSE A FILE");
- 
-     int file_index = app["config"]["file_index"].as<int>();
-     for (int i = 0; i < 10; i++)
-     {
--        // word count
--        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
-+        int y = 75 + i * 20;
++        int y = 58 + i * 22;
 +        bool hi = (i == traverse);
-+
+ 
+-    // Text to be displayed
+-    u8->setCursor(0, 40);
+-    u8->println();
+-    //
 +        // "> " marks the open file; the file's first characters are its
-+        // title (standard font - replaces the word count)
-+        char row[32];
++        // title
++        char row[40];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
-+
-+        u8->setCursor(pos_x, y);
+ 
+-    //
+-    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
+-    {
+-        u8->println(" [S] SYNC ");
+-    }
++        u8->setFont(u8g2_font_profont17_tf);
++        u8->setCursor(10, y);
 +        u8->print(row);
-+
+ 
+-    u8->println(" [W] WIFI");
+-    u8->println(" [L] LANGUAGE");
+-    u8->println(" [T] BLE KEYBOARD");
+-    u8->println(" [U] DRIVE MODE");
++        // content size, right-aligned in the smaller font
++        if (file_sizes[i] > 0)
++        {
++            char sz[12];
++            if (file_sizes[i] >= 1024)
++                snprintf(sz, sizeof(sz), "%lu.%luK",
++                         (unsigned long)(file_sizes[i] / 1024),
++                         (unsigned long)((file_sizes[i] % 1024) / 103));
++            else
++                snprintf(sz, sizeof(sz), "%lub",
++                         (unsigned long)file_sizes[i]);
++            u8->setFont(u8g2_font_profont12_tf);
++            u8->setCursor(392 - (int)strlen(sz) * 6, y);
++            u8->print(sz);
++            u8->setFont(u8g2_font_profont17_tf);
++        }
+ 
+-    u8->println();
+-    u8->println(" [B] BACK ");
 +        // traverse highlight: bold the row (transparent overstrikes, so
 +        // the extra passes don't erase the first) and frame it - inverse
 +        // video is unreadable with this menu's opaque glyph rendering
 +        if (hi)
 +        {
 +            u8->setFontMode(1);
-+            u8->setCursor(pos_x + 1, y);
++            u8->setCursor(11, y);
 +            u8->print(row);
-+            u8->setCursor(pos_x + 2, y);
++            u8->setCursor(12, y);
 +            u8->print(row);
 +            u8->setFontMode(0);
  
+-    // File Selection
+-    int pos_x = 190;
+-    u8->setCursor(pos_x, 45);
+-    u8->print("CHOOSE A FILE");
++            display->drawLine(4, y - 16, 396, y - 16, 1);
++            display->drawLine(4, y + 5, 396, y + 5, 1);
++            display->drawLine(4, y - 16, 4, y + 5, 1);
++            display->drawLine(396, y - 16, 396, y + 5, 1);
++        }
++    }
+ 
+-    int file_index = app["config"]["file_index"].as<int>();
+-    for (int i = 0; i < 10; i++)
++    // key legend
++    display->drawLine(0, 270, 400, 270, 1);
++    u8->setFont(u8g2_font_profont12_tf);
++    u8->setCursor(6, 288);
++    if (traverse >= 0)
++        u8->print("ARROWS MOVE   ENTER OPEN   D CLEAR   P PASSWORD   ESC EXIT");
++    else
+     {
+-        // word count
+-        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
+-
 -        u8->setCursor(pos_x, 75 + i * 20);
 -        u8->printf(" [%d]: %zu", i, wordCount);
-+            display->drawLine(pos_x - 4, y - 15, 396, y - 15, 1);
-+            display->drawLine(pos_x - 4, y + 5, 396, y + 5, 1);
-+            display->drawLine(pos_x - 4, y - 15, pos_x - 4, y + 5, 1);
-+            display->drawLine(396, y - 15, 396, y + 5, 1);
-+        }
++        String legend = "0-9 OPEN  F NAV  D CLEAR  P PWD";
++        if (gfs()->exists("/claude.json"))
++            legend += "  G GZ";
++        if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
++            legend += "  S SYNC";
++        legend += "  C CONFIG  B BACK";
++        u8->print(legend.c_str());
      }
-     //
-     u8->setCursor(pos_x, 290);
-@@ -72,6 +213,89 @@ void Home_keyboard(char key)
+-    //
+-    u8->setCursor(pos_x, 290);
+-    u8->printf(" [D] Clear File # %d", file_index);
++    u8->setFont(u8g2_font_profont17_tf);
+ }
+ 
+ //
+@@ -72,6 +214,92 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -274,10 +350,13 @@ index 966d565..c0c9ab2 100644
 +        // D: make it active, then the normal clear-file confirmation.
 +        // A locked file asks for its password first and then continues
 +        // straight to the confirmation - no manual detour into the file.
++        // After the delete the user returns here, not to the empty file.
 +        if (key == 'd' || key == 'D')
 +        {
 +            int sel = traverse;
 +            traverse = -1;
++
++            app["menu"]["clear_return_menu"] = true;
 +
 +            String path = format("/%d.txt", sel);
 +            bool locked = crypt_is_encrypted(path.c_str()) &&
@@ -324,36 +403,63 @@ index 966d565..c0c9ab2 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,6 +306,28 @@ void Home_keyboard(char key)
+@@ -82,55 +310,44 @@ void Home_keyboard(char key)
          }
      }
  
+-    else if (key == 'D' || key == 'd')
+-    {
+-        // to clear file
+-        app["menu"]["state"] = MENU_CLEAR;
+-    }
+-
+-    else if (key == '\b' || key == 'B' || key == 'b')
 +    else if (key == 'G' || key == 'g')
-+    {
+     {
+-        // go back to the word processor
+-        app["screen"] = WORDPROCESSOR;
 +        // open Grammana Z (only if configured)
 +        if (gfs()->exists("/claude.json"))
 +            WP_requestAskClaude();
-+    }
-+
+     }
+ 
+-    else if (key == 'w')
 +    else if (key == 'P' || key == 'p')
-+    {
+     {
+-        // move to keyboard layout
+-        app["menu"]["state"] = MENU_WIFI;
 +        // set / remove / unlock the current file's password
 +        WP_requestPassword();
-+    }
-+
-+    else if (key == 'I' || key == 'i')
-+    {
-+        // toggle dark mode (hardware panel inversion), persisted in config
-+        bool dark = !app["config"]["darkmode"].as<bool>();
-+        app["config"]["darkmode"] = dark;
-+        config_save();
-+        display_RLCD_dark(dark);
-+    }
-+
-     else if (key == 'D' || key == 'd')
+     }
+ 
+-    else if (key == 'l')
++    else if (key == 'C' || key == 'c')
      {
-         // to clear file
-@@ -121,16 +367,9 @@ void Home_keyboard(char key)
+-        // move to keyboard layout
+-        app["menu"]["state"] = MENU_LAYOUT;
++        // settings live in their own sub-screen
++        app["menu"]["state"] = MENU_SETTINGS;
+     }
+ 
+-    else if (key == 't')
++    else if (key == 'D' || key == 'd')
+     {
+-        // move to keyboard layout
+-        app["screen"] = KEYBOARDSCREEN;
++        // clear the current file; return to it afterwards
++        app["menu"]["clear_return_menu"] = false;
++        app["menu"]["state"] = MENU_CLEAR;
+     }
+ 
+-    else if (key == 'u')
++    else if (key == '\b' || key == 'B' || key == 'b')
+     {
+-        // move to keyboard layout
+-        app["menu"]["state"] = MENU_STORAGE;
++        // go back to the word processor
++        app["screen"] = WORDPROCESSOR;
+     }
+ 
      // chose file
      if (key > 47 && key < 58)
      {
@@ -372,34 +478,158 @@ index 966d565..c0c9ab2 100644
          app["screen"] = WORDPROCESSOR;
 +        WP_openFileGuarded(key - 48);
      }
- }
+-}
 \ No newline at end of file
++}
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-index 20809a1..8bc6f2c 100644
+index 20809a1..de39ba2 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-@@ -34,11 +34,16 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -10,6 +10,7 @@
+ #include "Layout/Layout.h"
+ #include "Wifi/Wifi.h"
+ #include "Storage/Storage.h"
++#include "Settings/Settings.h"
+ 
+ // state
+ bool menu_clear = false;
+@@ -34,11 +35,16 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // refresh the background
      menu_clear = true;
  
 -    //
 -    app["menu"]["state"] = MENU_HOME;
--
--    //
--    
 +    // another screen can hand over a sub-screen to open directly (the
 +    // password prompt chains into the clear-file confirmation this way);
 +    // otherwise the menu opens at home
 +    int pending = app["menu"]["pending"].as<int>();
 +    app["menu"]["pending"] = 0;
 +    app["menu"]["state"] = pending > 0 ? pending : MENU_HOME;
-+
+ 
+-    //
+-    
 +    // force the sub-screen setup to re-run: entering the menu again must
 +    // refresh the home state (file titles, LOCKED markers)
 +    menu_state_prev = -1;
  }
  
  void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -128,6 +134,13 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ 
+         Storage_render(display, u8);
+     }
++    else if (menu_state == MENU_SETTINGS)
++    {
++        if (menu_state_prev != menu_state)
++            Settings_setup(display, u8);
++
++        Settings_render(display, u8);
++    }
+ 
+     // save prev state
+     menu_state_prev = menu_state;
+@@ -189,6 +202,13 @@ void Menu_keyboard(char key)
+         Storage_keyboard(key);
+         return;
+     }
++
++    // Settings ([C] CONFIG)
++    else if (menu_state == MENU_SETTINGS)
++    {
++        Settings_keyboard(key);
++        return;
++    }
+ }
+ 
+ //
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.cpp
+new file mode 100644
+index 0000000..9d4f162
+--- /dev/null
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.cpp
+@@ -0,0 +1,68 @@
++#include "Settings.h"
++#include "../Menu.h"
++#include "app/app.h"
++#include "display/display.h"
++#include "../../display_RLCD.h"
++
++// [C] CONFIG: the rarely-used device settings, moved off the home screen
++// so the file list has the room
++
++//
++void Settings_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
++{
++    Menu_clear();
++}
++
++//
++void Settings_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
++{
++    JsonDocument &app = status();
++
++    u8->setCursor(0, 45);
++    u8->println();
++    u8->println(" CONFIG");
++    u8->println();
++    u8->println(" [W] WIFI");
++    u8->println(" [L] LANGUAGE");
++    u8->println(" [T] BLE KEYBOARD");
++    u8->println(" [U] DRIVE MODE");
++    u8->printf(" [I] DARK MODE: %s\n",
++               app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
++    u8->println();
++    u8->println(" [B] BACK");
++}
++
++//
++void Settings_keyboard(char key)
++{
++    JsonDocument &app = status();
++
++    if (key == 'w' || key == 'W')
++    {
++        app["menu"]["state"] = MENU_WIFI;
++    }
++    else if (key == 'l' || key == 'L')
++    {
++        app["menu"]["state"] = MENU_LAYOUT;
++    }
++    else if (key == 't' || key == 'T')
++    {
++        app["screen"] = KEYBOARDSCREEN;
++    }
++    else if (key == 'u' || key == 'U')
++    {
++        app["menu"]["state"] = MENU_STORAGE;
++    }
++    else if (key == 'i' || key == 'I')
++    {
++        // toggle dark mode (hardware panel inversion), persisted in config
++        bool dark = !app["config"]["darkmode"].as<bool>();
++        app["config"]["darkmode"] = dark;
++        config_save();
++        display_RLCD_dark(dark);
++    }
++    else if (key == 'b' || key == 'B' || key == 27 || key == '\b')
++    {
++        app["menu"]["state"] = MENU_HOME;
++    }
++}
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.h b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.h
+new file mode 100644
+index 0000000..ee87cda
+--- /dev/null
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Settings/Settings.h
+@@ -0,0 +1,8 @@
++#pragma once
++
++#include "ST7305_4p2_BW_DisplayDriver.h"
++#include "U8g2_for_ST73XX.h"
++
++void Settings_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
++void Settings_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
++void Settings_keyboard(char key);
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 index bade544..f2f78d4 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
@@ -1338,6 +1568,18 @@ index bf924ce..f0ad0f5 100644
 +
 +// dark mode: hardware panel inversion (white text on black)
 +void display_RLCD_dark(bool enabled);
+diff --git a/micro-journal-rev-4-esp32/src/display/display.h b/micro-journal-rev-4-esp32/src/display/display.h
+index 23bb86b..8a7e394 100644
+--- a/micro-journal-rev-4-esp32/src/display/display.h
++++ b/micro-journal-rev-4-esp32/src/display/display.h
+@@ -29,6 +29,7 @@
+ #define MENU_BRIGHTNESS 13
+ #define MENU_INFO 14
+ #define MENU_LANGUAGE 15
++#define MENU_SETTINGS 16
+ 
+ // MENU button
+ #define FN 28
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 index d8832fa..c8d6231 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
