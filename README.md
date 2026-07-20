@@ -45,8 +45,9 @@ every time the menu opens; protected files show `LOCKED`.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (bold + framed row); arrows move the highlight (wrapping), Enter
-opens it, `D` jumps to its clear-file confirmation, `P` to its password
-flow (a protected file asks for its password first). ESC or `F` exits;
+opens it, `D` jumps to its clear-file confirmation, `P` goes straight to
+its password prompt — set one if it has none, or enter the existing
+password to remove it (no need to open the file first). ESC or `F` exits;
 digits still open directly.
 
 **Per-file passwords (encryption)** — `[P] PASSWORD` on the main menu
