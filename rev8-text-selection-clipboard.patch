@@ -43,7 +43,7 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..0203880 100644
+index 966d565..7f4139c 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,86 @@
@@ -171,7 +171,7 @@ index 966d565..0203880 100644
  
      u8->println();
      u8->println(" [B] BACK ");
-@@ -50,16 +150,33 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -50,16 +150,44 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // File Selection
      int pos_x = 190;
      u8->setCursor(pos_x, 45);
@@ -187,30 +187,41 @@ index 966d565..0203880 100644
 -        // word count
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int y = 75 + i * 20;
++        bool hi = (i == traverse);
  
 -        u8->setCursor(pos_x, 75 + i * 20);
 -        u8->printf(" [%d]: %zu", i, wordCount);
-+        // traverse highlight: filled row, text drawn in the paper color
-+        bool hi = (i == traverse);
-+        if (hi)
-+        {
-+            display->drawFilledRectangle(pos_x - 3, y - 14, 398, y + 4, 1);
-+            u8->setForegroundColor(0);
-+        }
-+
-+        u8->setCursor(pos_x, y);
-+
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
-+        u8->printf("%c[%d] ", i == file_index ? '>' : ' ', i);
-+        u8->print(file_titles[i][0] ? file_titles[i] : "-");
++        char row[32];
++        snprintf(row, sizeof(row), "%c[%d] %s",
++                 i == file_index ? '>' : ' ', i,
++                 file_titles[i][0] ? file_titles[i] : "-");
 +
++        u8->setCursor(pos_x, y);
++        u8->print(row);
++
++        // traverse highlight: bold the row (transparent overstrikes, so
++        // the extra passes don't erase the first) and frame it - inverse
++        // video is unreadable with this menu's opaque glyph rendering
 +        if (hi)
-+            u8->setForegroundColor(1);
++        {
++            u8->setFontMode(1);
++            u8->setCursor(pos_x + 1, y);
++            u8->print(row);
++            u8->setCursor(pos_x + 2, y);
++            u8->print(row);
++            u8->setFontMode(0);
++
++            display->drawLine(pos_x - 4, y - 15, 396, y - 15, 1);
++            display->drawLine(pos_x - 4, y + 5, 396, y + 5, 1);
++            display->drawLine(pos_x - 4, y - 15, pos_x - 4, y + 5, 1);
++            display->drawLine(396, y - 15, 396, y + 5, 1);
++        }
      }
      //
      u8->setCursor(pos_x, 290);
-@@ -72,6 +189,93 @@ void Home_keyboard(char key)
+@@ -72,6 +200,93 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -304,7 +315,7 @@ index 966d565..0203880 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,6 +286,28 @@ void Home_keyboard(char key)
+@@ -82,6 +297,28 @@ void Home_keyboard(char key)
          }
      }
  
@@ -333,7 +344,7 @@ index 966d565..0203880 100644
      else if (key == 'D' || key == 'd')
      {
          // to clear file
-@@ -121,16 +347,9 @@ void Home_keyboard(char key)
+@@ -121,16 +358,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
@@ -355,7 +366,7 @@ index 966d565..0203880 100644
  }
 \ No newline at end of file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..5e27d80 100644
+index bade544..9f543d4 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -367,7 +378,7 @@ index bade544..5e27d80 100644
  
  //
  int STATUSBAR_Y = 295;
-@@ -44,6 +46,164 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+@@ -44,6 +46,160 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
  // active font, selected in WP_setup from config "font"
  static EditorFont *wp_font = &WP_FONTS[0];
  
@@ -518,13 +529,9 @@ index bade544..5e27d80 100644
 +
 +    Editor::getInstance().saveFile();
 +
-+    int mode;
-+    if (!crypt_is_encrypted(path.c_str()))
-+        mode = PW_SET;
-+    else if (crypt_unlocked_for(path.c_str()))
-+        mode = PW_REMOVE;
-+    else
-+        mode = PW_UNLOCK;
++    // removing protection always verifies the password by entry - the
++    // key is never assumed cached (leaving a file forgets it)
++    int mode = crypt_is_encrypted(path.c_str()) ? PW_REMOVE : PW_SET;
 +
 +    WP_promptPassword(mode, fileIndex);
 +}
@@ -532,7 +539,7 @@ index bade544..5e27d80 100644
  // layout derived from the active font metrics in WP_setup
  static int editY = 264;   // baseline of the edit line
  static int cursorY = 270; // top of the cursor band under the edit line
-@@ -91,9 +251,18 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -91,9 +247,18 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -553,7 +560,7 @@ index bade544..5e27d80 100644
  
      // start from clear background
      clear_background = true;
-@@ -104,9 +273,76 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -104,9 +269,68 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      last_sleep = millis();
  }
  
@@ -584,27 +591,19 @@ index bade544..5e27d80 100644
 +    else
 +        u8->printf("REMOVE PASSWORD FROM FILE %d?", pw_target);
 +
-+    if (pw_mode == PW_REMOVE)
-+    {
-+        u8->setCursor(20, 110);
-+        u8->print("[Y] YES   [N] NO");
-+    }
-+    else
-+    {
-+        u8->setCursor(20, 110);
-+        u8->print("PASSWORD: ");
-+        for (int i = 0; i < pw_len; i++)
-+            u8->print("*");
-+        u8->setCursor(20, 150);
-+        u8->print("[ENTER] OK   [ESC] CANCEL");
++    u8->setCursor(20, 110);
++    u8->print("PASSWORD: ");
++    for (int i = 0; i < pw_len; i++)
++        u8->print("*");
++    u8->setCursor(20, 150);
++    u8->print("[ENTER] OK   [ESC] CANCEL");
 +
-+        if (pw_mode == PW_SET)
-+        {
-+            u8->setCursor(20, 210);
-+            u8->print("IF FORGOTTEN, THIS FILE IS");
-+            u8->setCursor(20, 234);
-+            u8->print("LOST FOREVER. NO RECOVERY.");
-+        }
++    if (pw_mode == PW_SET)
++    {
++        u8->setCursor(20, 210);
++        u8->print("IF FORGOTTEN, THIS FILE IS");
++        u8->setCursor(20, 234);
++        u8->print("LOST FOREVER. NO RECOVERY.");
 +    }
 +
 +    if (pw_msg[0])
@@ -630,7 +629,7 @@ index bade544..5e27d80 100644
      // the editor swapped to a different window of the file (paging, or the
      // buffer filling up while typing) - force a full redraw
      if (Editor::getInstance().pageChanged)
-@@ -119,6 +355,40 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -119,6 +343,40 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // timers
      WP_check_saved();
  
@@ -671,7 +670,7 @@ index bade544..5e27d80 100644
      // CLEAR BACKGROUND
      WP_render_clear(display, u8);
  
-@@ -161,6 +431,8 @@ bool WP_contentChanged()
+@@ -161,6 +419,8 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
@@ -680,7 +679,7 @@ index bade544..5e27d80 100644
  
      JsonDocument &app = status();
  
-@@ -170,6 +442,7 @@ bool WP_contentChanged()
+@@ -170,6 +430,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -688,7 +687,7 @@ index bade544..5e27d80 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,7 +453,9 @@ bool WP_contentChanged()
+@@ -180,7 +441,9 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
@@ -699,7 +698,7 @@ index bade544..5e27d80 100644
  
      cursorPos_prev = cursorPos;
      cursorLinePos_prev = cursorLinePos;
-@@ -188,7 +463,9 @@ bool WP_contentChanged()
+@@ -188,7 +451,9 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
@@ -709,7 +708,7 @@ index bade544..5e27d80 100644
  
      return changed;
  }
-@@ -244,6 +521,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +509,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -724,7 +723,7 @@ index bade544..5e27d80 100644
      //
      JsonDocument &app = status();
  
-@@ -304,20 +589,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -304,20 +577,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  }
  
  //
@@ -780,8 +779,7 @@ index bade544..5e27d80 100644
 +    // color switch below never lands inside a multi-byte sequence.
 +    int selStart = -1, selEnd = -1;
 +    if (editor.hasSelection())
-     {
--        char value = *(line + i);
++    {
 +        selStart = editor.selectionStart();
 +        selEnd = editor.selectionEnd();
 +    }
@@ -810,15 +808,15 @@ index bade544..5e27d80 100644
 +    bool inverse = false;
 +    int i = 0;
 +    while (i < length)
-+    {
+     {
+-        char value = *(line + i);
 +        char value = line[i];
          if (value == '\n')
 +        {
 +            i++;
              continue;
 +        }
- 
--        u8->print(value);
++
 +        bool selected = selStart >= 0 &&
 +                        lineStart + i >= selStart &&
 +                        lineStart + i < selEnd;
@@ -839,7 +837,8 @@ index bade544..5e27d80 100644
 +            }
 +            inverse = selected;
 +        }
-+
+ 
+-        u8->print(value);
 +        // emphasis markers: toggle state, draw the stars unstyled
 +        if (value == '*')
 +        {
@@ -900,7 +899,7 @@ index bade544..5e27d80 100644
      }
  }
  
-@@ -382,11 +814,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +802,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -922,7 +921,7 @@ index bade544..5e27d80 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +843,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +831,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -931,7 +930,7 @@ index bade544..5e27d80 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +855,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +843,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -946,7 +945,7 @@ index bade544..5e27d80 100644
  }
  
  //
-@@ -478,6 +926,88 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +914,74 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -962,26 +961,6 @@ index bade544..5e27d80 100644
 +
 +        JsonDocument &app2 = status();
 +        String path = format("/%d.txt", pw_target);
-+
-+        if (pw_mode == PW_REMOVE)
-+        {
-+            if (key == 'y' || key == 'Y')
-+            {
-+                if (crypt_unprotect(path.c_str()))
-+                {
-+                    pw_mode = PW_NONE;
-+                    WP_switchToFile(pw_target);
-+                }
-+                else
-+                    pw_msg = "REMOVE FAILED";
-+            }
-+            else if (key == 'n' || key == 'N' || key == 27 || key == MENU)
-+            {
-+                pw_mode = PW_NONE;
-+                app2["screen"] = MENUSCREEN;
-+            }
-+            return;
-+        }
 +
 +        if (key == 27 || key == MENU)
 +        {
@@ -1009,9 +988,15 @@ index bade544..5e27d80 100644
 +                return;
 +            }
 +
-+            bool ok = (pw_mode == PW_UNLOCK)
-+                          ? crypt_unlock(path.c_str(), pw_entry)
-+                          : crypt_protect(path.c_str(), pw_entry);
++            bool ok;
++            if (pw_mode == PW_UNLOCK)
++                ok = crypt_unlock(path.c_str(), pw_entry);
++            else if (pw_mode == PW_REMOVE)
++                // verify by entry, then decrypt in place
++                ok = crypt_unlock(path.c_str(), pw_entry) &&
++                     crypt_unprotect(path.c_str());
++            else
++                ok = crypt_protect(path.c_str(), pw_entry);
 +            memset(pw_entry, 0, sizeof(pw_entry));
 +
 +            if (ok)
@@ -1022,7 +1007,7 @@ index bade544..5e27d80 100644
 +            }
 +            else
 +            {
-+                pw_msg = (pw_mode == PW_UNLOCK) ? "WRONG PASSWORD" : "FAILED";
++                pw_msg = (pw_mode == PW_SET) ? "FAILED" : "WRONG PASSWORD";
 +                pw_len = 0;
 +            }
 +            return;
@@ -1035,7 +1020,7 @@ index bade544..5e27d80 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +1016,111 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +990,115 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -1063,6 +1048,10 @@ index bade544..5e27d80 100644
 +            }
 +            else
 +            {
++                // leaving the file re-locks it - opening a protected file
++                // again (even the same one) prompts for its password
++                crypt_forget();
++
 +                //
 +                app["screen"] = MENUSCREEN;
 +
@@ -1152,7 +1141,7 @@ index bade544..5e27d80 100644
          }
      }
  
-@@ -505,15 +1132,12 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,15 +1110,12 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  

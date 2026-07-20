@@ -44,19 +44,20 @@ word count), with `>` marking the currently open file. Titles refresh
 every time the menu opens; protected files show `LOCKED`.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
-the list; arrows move the highlight (wrapping), Enter opens it, `D` jumps
-to its clear-file confirmation, `P` to its password flow (a protected
-file asks for its password first). ESC or `F` exits; digits still open
-directly.
+the list (bold + framed row); arrows move the highlight (wrapping), Enter
+opens it, `D` jumps to its clear-file confirmation, `P` to its password
+flow (a protected file asks for its password first). ESC or `F` exits;
+digits still open directly.
 
 **Per-file passwords (encryption)** — `[P] PASSWORD` on the main menu
 sets a password on the current file: the file is re-written as AES-256-CTR
 ciphertext (PBKDF2-derived key, per-file salt) — plaintext never touches
 the disk, so Drive Mode and sync only ever see unreadable bytes. Opening a
 protected file (menu, Fn+number, or boot) prompts for the password; wrong
-entries can be retried, ESC backs out to the menu. `[P]` on a protected,
-open file offers to remove the password (decrypts in place). The key for
-the open file stays cached until you switch files or power off. **A
+entries can be retried, ESC backs out to the menu. **Leaving a file to
+the menu re-locks it** — re-entering always prompts again. `[P]` on a
+protected file asks for its password and then removes the protection
+(decrypts in place). **A
 forgotten password means the file is permanently unrecoverable** — there
 is no reset. Known tradeoffs: word counts for large (>8 KB) protected
 files only cover the loaded window, and synced snapshots of the same
