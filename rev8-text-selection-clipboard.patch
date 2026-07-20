@@ -43,16 +43,22 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..99340de 100644
+index 966d565..9191322 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,80 @@
+@@ -6,6 +6,86 @@
  
  //
  #include "service/Editor/Editor.h"
 +#include "../../WordProcessor/WordProcessor.h"
 +#include "../../display_RLCD.h"
 +#include "service/Crypt/Crypt.h"
++
++// File traverse mode ([F]): -1 = off, else the highlighted file 0..9.
++// Arrows move the highlight; Enter opens it, D clears it, P manages its
++// password - each action makes the highlighted file the active file
++// first, so the existing confirmation and password flows apply.
++static int traverse = -1;
 +
 +// First line of each file, shown as its title in the file list. Loaded
 +// when the home screen opens; 10 tiny reads are instant on the FAT.
@@ -127,17 +133,20 @@ index 966d565..99340de 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,6 +90,9 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,6 +96,12 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
 +
 +    // refresh the file titles every time the home screen opens
 +    home_load_titles();
++
++    //
++    traverse = -1;
  }
  
  //
-@@ -39,10 +116,23 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -39,10 +125,24 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->println(" [S] SYNC ");
      }
  
@@ -153,6 +162,7 @@ index 966d565..99340de 100644
      u8->println(" [U] DRIVE MODE");
 +    u8->printf(" [I] DARK MODE: %s\n",
 +               app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
++    u8->println(" [F] SELECT FILE");
 +    u8->printf(" [P] PASSWORD: %s\n",
 +               crypt_is_encrypted(
 +                   format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
@@ -161,24 +171,140 @@ index 966d565..99340de 100644
  
      u8->println();
      u8->println(" [B] BACK ");
-@@ -55,11 +145,12 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -50,16 +150,33 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     // File Selection
+     int pos_x = 190;
+     u8->setCursor(pos_x, 45);
+-    u8->print("CHOOSE A FILE");
++    if (traverse >= 0)
++        u8->print("ENTER OPEN D CLR P PWD");
++    else
++        u8->print("CHOOSE A FILE");
+ 
      int file_index = app["config"]["file_index"].as<int>();
      for (int i = 0; i < 10; i++)
      {
 -        // word count
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
--
-         u8->setCursor(pos_x, 75 + i * 20);
++        int y = 75 + i * 20;
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
 -        u8->printf(" [%d]: %zu", i, wordCount);
++        // traverse highlight: filled row, text drawn in the paper color
++        bool hi = (i == traverse);
++        if (hi)
++        {
++            display->drawFilledRectangle(pos_x - 3, y - 14, 398, y + 4, 1);
++            u8->setForegroundColor(0);
++        }
++
++        u8->setCursor(pos_x, y);
 +
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        u8->printf("%c[%d] ", i == file_index ? '>' : ' ', i);
 +        u8->print(file_titles[i][0] ? file_titles[i] : "-");
++
++        if (hi)
++            u8->setForegroundColor(1);
      }
      //
      u8->setCursor(pos_x, 290);
-@@ -82,6 +173,28 @@ void Home_keyboard(char key)
+@@ -72,6 +189,93 @@ void Home_keyboard(char key)
+     //
+     JsonDocument &app = status();
+ 
++    // FILE TRAVERSE MODE
++    if (key == 'f' || key == 'F')
++    {
++        traverse = (traverse < 0) ? app["config"]["file_index"].as<int>() : -1;
++        if (traverse > 9)
++            traverse = 0;
++        return;
++    }
++    if (traverse >= 0)
++    {
++        // arrows move the highlight (up/left and down/right)
++        if (key == 20 || key == 18)
++        {
++            traverse = (traverse + 9) % 10;
++            return;
++        }
++        if (key == 21 || key == 19)
++        {
++            traverse = (traverse + 1) % 10;
++            return;
++        }
++
++        // Enter: open the highlighted file (password gate applies)
++        if (key == '\n')
++        {
++            int sel = traverse;
++            traverse = -1;
++            app["screen"] = WORDPROCESSOR;
++            WP_openFileGuarded(sel);
++            return;
++        }
++
++        // D: make it active (unlocking if protected), then the normal
++        // clear-file confirmation
++        if (key == 'd' || key == 'D')
++        {
++            int sel = traverse;
++            traverse = -1;
++
++            String path = format("/%d.txt", sel);
++            bool locked = crypt_is_encrypted(path.c_str()) &&
++                          !crypt_unlocked_for(path.c_str());
++
++            app["screen"] = WORDPROCESSOR;
++            WP_openFileGuarded(sel);
++            if (!locked)
++            {
++                // opened - hand over to the clear confirmation screen
++                app["menu"]["state"] = MENU_CLEAR;
++                app["screen"] = MENUSCREEN;
++            }
++            // locked: the password prompt is showing; clear it after
++            return;
++        }
++
++        // P: make it active, then the password set/remove flow
++        if (key == 'p' || key == 'P')
++        {
++            int sel = traverse;
++            traverse = -1;
++
++            String path = format("/%d.txt", sel);
++            bool locked = crypt_is_encrypted(path.c_str()) &&
++                          !crypt_unlocked_for(path.c_str());
++
++            app["screen"] = WORDPROCESSOR;
++            WP_openFileGuarded(sel);
++            if (!locked)
++                WP_requestPassword();
++            // locked: unlock prompt first; press P again once open
++            return;
++        }
++
++        // ESC leaves traverse mode
++        if (key == 27)
++        {
++            traverse = -1;
++            return;
++        }
++
++        // digits fall through to the normal open-by-number handler
++        if (key >= '0' && key <= '9')
++            traverse = -1;
++        else
++            return; // everything else is ignored while traversing
++    }
++
+     // home
+     if (key == 'S' || key == 's')
+     {
+@@ -82,6 +286,28 @@ void Home_keyboard(char key)
          }
      }
  
@@ -207,7 +333,7 @@ index 966d565..99340de 100644
      else if (key == 'D' || key == 'd')
      {
          // to clear file
-@@ -121,16 +234,9 @@ void Home_keyboard(char key)
+@@ -121,16 +347,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
