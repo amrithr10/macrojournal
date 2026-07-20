@@ -45,7 +45,9 @@ every time the menu opens; protected files show `LOCKED`.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (bold + framed row); arrows move the highlight (wrapping), Enter
-opens it, `D` jumps to its clear-file confirmation, `P` goes straight to
+opens it, `D` jumps to its clear-file confirmation (a locked file asks
+for its password first, then continues straight to the confirmation),
+`P` goes straight to
 its password prompt — set one if it has none, or enter the existing
 password to remove it (no need to open the file first). Traverse mode is
 sticky: opening a file and coming back to the menu restores the highlight
