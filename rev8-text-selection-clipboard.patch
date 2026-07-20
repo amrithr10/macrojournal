@@ -43,7 +43,7 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..9191322 100644
+index 966d565..0203880 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,86 @@
@@ -150,10 +150,10 @@ index 966d565..9191322 100644
          u8->println(" [S] SYNC ");
      }
  
-+    // Ask Claude - only offered once claude.json is on the drive
++    // Grammana Z (the LLM assistant) - only once claude.json is present
 +    if (gfs()->exists("/claude.json"))
 +    {
-+        u8->println(" [C] ASK CLAUDE");
++        u8->println(" [G] GRAMMANA Z");
 +    }
 +
      u8->println(" [W] WIFI");
@@ -308,9 +308,9 @@ index 966d565..9191322 100644
          }
      }
  
-+    else if (key == 'C' || key == 'c')
++    else if (key == 'G' || key == 'g')
 +    {
-+        // open the Ask Claude screen (only if configured)
++        // open Grammana Z (only if configured)
 +        if (gfs()->exists("/claude.json"))
 +            WP_requestAskClaude();
 +    }
@@ -355,7 +355,7 @@ index 966d565..9191322 100644
  }
 \ No newline at end of file
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..a209c4c 100644
+index bade544..5e27d80 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -914,7 +914,7 @@ index bade544..a209c4c 100644
 +    if (file_index == SCRATCH_FILE_INDEX)
 +        u8->printf("TODO ");
 +    else if (file_index == ASK_FILE_INDEX)
-+        u8->printf("ASK ");
++        u8->printf("GZ ");
 +    else if (file_index == GRAMMAR_FILE_INDEX)
 +        u8->printf("GRAMMAR ");
 +    else
@@ -1581,10 +1581,10 @@ index aa3d65d..74e0ab1 100644
  
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 new file mode 100644
-index 0000000..b5c57af
+index 0000000..d1083f1
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
-@@ -0,0 +1,463 @@
+@@ -0,0 +1,602 @@
 +#include "AskClaude.h"
 +#include "app/app.h"
 +
@@ -1611,6 +1611,12 @@ index 0000000..b5c57af
 +#define MODE_CONVERSATION 0
 +#define MODE_GRAMMAR 1
 +#define MODE_REWRITE 2
++
++// LLM providers - the config picks one by an explicit "provider" field or,
++// failing that, by whichever provider key is present
++#define PROV_ANTHROPIC 0
++#define PROV_OPENAI 1
++#define PROV_GEMINI 2
 +static volatile int _mode = MODE_CONVERSATION;
 +static volatile bool _answer_grammar = false;
 +
@@ -1621,6 +1627,8 @@ index 0000000..b5c57af
 +static String _system = "";
 +static String _grammar_system = "";
 +static String _rewrite_system = "";
++static int _provider = PROV_ANTHROPIC;
++static String _default_model = "claude-opus-4-8";
 +
 +// default reviewer instructions; override with "grammar_system" in claude.json
 +static const char *GRAMMAR_SYSTEM_DEFAULT =
@@ -1691,12 +1699,52 @@ index 0000000..b5c57af
 +        return false;
 +    }
 +
-+    _api_key = doc["api_key"] | "";
-+    _model = doc["model"] | "claude-opus-4-8";
 +    _max_tokens = doc["max_tokens"] | 1024;
 +    _system = doc["system"] | "";
 +    _grammar_system = doc["grammar_system"] | GRAMMAR_SYSTEM_DEFAULT;
 +    _rewrite_system = doc["rewrite_system"] | REWRITE_SYSTEM_DEFAULT;
++
++    // "api_key" is the Anthropic key (backward compatible); each provider
++    // also has its own named field
++    String anthropicKey = doc["anthropic_api_key"] | (doc["api_key"] | "");
++    String openaiKey = doc["openai_api_key"] | "";
++    String geminiKey = doc["gemini_api_key"] | "";
++
++    // explicit provider, else auto-detect by whichever key is filled in
++    String provider = doc["provider"] | "";
++    provider.toLowerCase();
++    if (provider.length() == 0)
++    {
++        if (anthropicKey.length() >= 10)
++            provider = "anthropic";
++        else if (openaiKey.length() >= 10)
++            provider = "openai";
++        else if (geminiKey.length() >= 10)
++            provider = "gemini";
++    }
++
++    if (provider == "openai")
++    {
++        _provider = PROV_OPENAI;
++        _api_key = openaiKey.length() ? openaiKey : anthropicKey;
++        _default_model = "gpt-4o-mini";
++    }
++    else if (provider == "gemini" || provider == "google")
++    {
++        _provider = PROV_GEMINI;
++        _api_key = geminiKey.length() ? geminiKey : anthropicKey;
++        _default_model = "gemini-2.0-flash";
++    }
++    else
++    {
++        _provider = PROV_ANTHROPIC;
++        _api_key = anthropicKey;
++        _default_model = "claude-opus-4-8";
++    }
++
++    // "model" overrides the provider default
++    String model = doc["model"] | "";
++    _model = model.length() ? model : _default_model;
 +
 +    if (_api_key.length() < 10)
 +    {
@@ -1704,6 +1752,7 @@ index 0000000..b5c57af
 +        return false;
 +    }
 +
++    _log("[askclaude] provider %d model %s\n", _provider, _model.c_str());
 +    return true;
 +}
 +
@@ -1862,11 +1911,6 @@ index 0000000..b5c57af
 +    if (!ask_load_config())
 +        return;
 +
-+    // build the request body first - cheap, and fails fast on an
-+    // empty prompt without touching the radio
-+    JsonDocument requestDoc;
-+    requestDoc["model"] = _model;
-+
 +    // a rewrite must be able to return the whole corrected text, so give
 +    // it output room proportional to the input (~1 token per 3 bytes,
 +    // with slack), never less than the configured max_tokens
@@ -1879,14 +1923,16 @@ index 0000000..b5c57af
 +        if (maxTokens > 6000)
 +            maxTokens = 6000;
 +    }
-+    requestDoc["max_tokens"] = maxTokens;
 +
-+    JsonArray messages = requestDoc["messages"].to<JsonArray>();
++    // Build a provider-neutral conversation (role = user/assistant) plus
++    // the system prompt for this mode; the provider render below turns it
++    // into the right JSON shape.
++    JsonDocument convDoc;
++    JsonArray conv = convDoc.to<JsonArray>();
++    String systemPrompt;
 +
 +    if (_mode == MODE_GRAMMAR || _mode == MODE_REWRITE)
 +    {
-+        // one user turn: the text under review; the reviewer role comes
-+        // from the mode's system prompt
 +        String text = _prompt;
 +        text.trim();
 +        if (text.length() == 0)
@@ -1894,24 +1940,80 @@ index 0000000..b5c57af
 +            ask_fail("NOTHING TO CHECK");
 +            return;
 +        }
-+
-+        requestDoc["system"] = (_mode == MODE_REWRITE) ? _rewrite_system
-+                                                       : _grammar_system;
-+        JsonObject msg = messages.add<JsonObject>();
-+        msg["role"] = "user";
-+        msg["content"] = text;
++        systemPrompt = (_mode == MODE_REWRITE) ? _rewrite_system : _grammar_system;
++        JsonObject o = conv.add<JsonObject>();
++        o["role"] = "user";
++        o["content"] = text;
 +    }
 +    else
 +    {
-+        if (_system.length() > 0)
-+            requestDoc["system"] = _system;
-+        if (!ask_build_messages(messages))
++        systemPrompt = _system;
++        if (!ask_build_messages(conv))
 +            return;
 +    }
 +
++    // Render the provider-specific request body, endpoint and auth.
++    JsonDocument req;
++    String url;
++
++    if (_provider == PROV_OPENAI)
++    {
++        // OpenAI chat completions: system is a leading "system" message
++        req["model"] = _model;
++        req["max_tokens"] = maxTokens;
++        JsonArray m = req["messages"].to<JsonArray>();
++        if (systemPrompt.length())
++        {
++            JsonObject s = m.add<JsonObject>();
++            s["role"] = "system";
++            s["content"] = systemPrompt;
++        }
++        for (JsonObject src : conv)
++        {
++            JsonObject o = m.add<JsonObject>();
++            o["role"] = src["role"];
++            o["content"] = src["content"];
++        }
++        url = "https://api.openai.com/v1/chat/completions";
++    }
++    else if (_provider == PROV_GEMINI)
++    {
++        // Gemini: "contents" with role user/model, separate systemInstruction
++        if (systemPrompt.length())
++            req["systemInstruction"]["parts"][0]["text"] = systemPrompt;
++        JsonArray c = req["contents"].to<JsonArray>();
++        for (JsonObject src : conv)
++        {
++            JsonObject o = c.add<JsonObject>();
++            const char *role = src["role"].as<const char *>();
++            o["role"] = (role && strcmp(role, "assistant") == 0) ? "model" : "user";
++            o["parts"][0]["text"] = src["content"];
++        }
++        req["generationConfig"]["maxOutputTokens"] = maxTokens;
++        url = "https://generativelanguage.googleapis.com/v1beta/models/" +
++              _model + ":generateContent";
++    }
++    else
++    {
++        // Anthropic messages
++        req["model"] = _model;
++        req["max_tokens"] = maxTokens;
++        if (systemPrompt.length())
++            req["system"] = systemPrompt;
++        JsonArray m = req["messages"].to<JsonArray>();
++        for (JsonObject src : conv)
++        {
++            JsonObject o = m.add<JsonObject>();
++            o["role"] = src["role"];
++            o["content"] = src["content"];
++        }
++        url = "https://api.anthropic.com/v1/messages";
++    }
++
 +    String body;
-+    serializeJson(requestDoc, body);
-+    requestDoc.clear();
++    serializeJson(req, body);
++    req.clear();
++    convDoc.clear();
 +
 +    //
 +    if (!ask_connect_wifi())
@@ -1931,12 +2033,19 @@ index 0000000..b5c57af
 +    // TLS without certificate pinning - same approach the Sync service
 +    // uses for Google Drive.
 +    HTTPClient http;
-+    http.begin("https://api.anthropic.com/v1/messages");
++    http.begin(url);
 +    http.setConnectTimeout(15000);
-+    http.setTimeout(60000); // Opus without thinking usually answers well within this
++    http.setTimeout(60000);
 +    http.addHeader("Content-Type", "application/json");
-+    http.addHeader("x-api-key", _api_key);
-+    http.addHeader("anthropic-version", "2023-06-01");
++    if (_provider == PROV_OPENAI)
++        http.addHeader("Authorization", "Bearer " + _api_key);
++    else if (_provider == PROV_GEMINI)
++        http.addHeader("x-goog-api-key", _api_key);
++    else
++    {
++        http.addHeader("x-api-key", _api_key);
++        http.addHeader("anthropic-version", "2023-06-01");
++    }
 +
 +    int code = http.POST(body);
 +    String response = (code > 0) ? http.getString() : "";
@@ -1960,28 +2069,58 @@ index 0000000..b5c57af
 +
 +    if (code != 200)
 +    {
-+        // surface the API's error type (e.g. authentication_error)
++        // surface whatever the provider names the failure
 +        const char *type = responseDoc["error"]["type"] | "";
-+        String msg = format("HTTP %d %s", code, type);
-+        ask_fail(msg.c_str());
++        if (!type[0])
++            type = responseDoc["error"]["status"] | "";
++        String detail = type[0] ? String(type)
++                                : String((const char *)(responseDoc["error"]["message"] | ""));
++        if (detail.length() > 24)
++            detail = detail.substring(0, 24);
++        ask_fail(format("HTTP %d %s", code, detail.c_str()).c_str());
 +        return;
 +    }
 +
-+    // a refusal returns 200 with no usable text
-+    const char *stopReason = responseDoc["stop_reason"] | "";
-+    if (strcmp(stopReason, "refusal") == 0)
-+    {
-+        ask_fail("REFUSED");
-+        return;
-+    }
-+
-+    // collect the text blocks
++    // extract the answer text per provider
 +    String answer = "";
-+    for (JsonVariant blockVar : responseDoc["content"].as<JsonArray>())
++    bool truncated = false;
++
++    if (_provider == PROV_OPENAI)
 +    {
-+        const char *type = blockVar["type"] | "";
-+        if (strcmp(type, "text") == 0)
-+            answer += blockVar["text"] | "";
++        JsonObject choice = responseDoc["choices"][0];
++        answer = (const char *)(choice["message"]["content"] | "");
++        truncated = strcmp(choice["finish_reason"] | "", "length") == 0;
++    }
++    else if (_provider == PROV_GEMINI)
++    {
++        JsonObject cand = responseDoc["candidates"][0];
++        for (JsonVariant part : cand["content"]["parts"].as<JsonArray>())
++            answer += (const char *)(part["text"] | "");
++        truncated = strcmp(cand["finishReason"] | "", "MAX_TOKENS") == 0;
++        if (answer.length() == 0)
++        {
++            const char *blocked = responseDoc["promptFeedback"]["blockReason"] | "";
++            if (blocked[0])
++            {
++                ask_fail("BLOCKED");
++                return;
++            }
++        }
++    }
++    else
++    {
++        const char *stopReason = responseDoc["stop_reason"] | "";
++        if (strcmp(stopReason, "refusal") == 0)
++        {
++            ask_fail("REFUSED");
++            return;
++        }
++        for (JsonVariant blockVar : responseDoc["content"].as<JsonArray>())
++        {
++            if (strcmp(blockVar["type"] | "", "text") == 0)
++                answer += (const char *)(blockVar["text"] | "");
++        }
++        truncated = strcmp(stopReason, "max_tokens") == 0;
 +    }
 +
 +    if (answer.length() == 0)
@@ -1990,7 +2129,7 @@ index 0000000..b5c57af
 +        return;
 +    }
 +
-+    if (strcmp(stopReason, "max_tokens") == 0)
++    if (truncated)
 +        answer += "\n[cut off - raise max_tokens in claude.json]";
 +
 +    _answer = answer;

@@ -75,14 +75,21 @@ on the drive as `10.txt` (visible in Drive Mode, included in sync), and
 Fn+0–9 can't reach it. Switching files with Fn+number while in the
 scratchpad leaves it like any other file.
 
-**Ask Claude** — Ctrl+Shift+C opens the ask screen (hidden file slot 11,
-status bar shows `ASK`). Type a question, press **Shift+Enter** to send it
-to the Anthropic API over WiFi; the status bar shows `ASKING...` and the
-answer is appended below a `---` separator (typing stays live during the
-request — it runs on the second core). Everything in the file is sent as
-conversation context, with `---` lines separating user/assistant turns —
-so follow-ups just work; select-all + delete starts a fresh conversation.
-ESC returns to your writing.
+**Grammana Z (LLM assistant)** — `[G] GRAMMANA Z` on the home menu (or
+Ctrl+Shift+C in the editor) opens the assistant screen (hidden file slot
+11, status bar `GZ`). Type a question, press **Shift+Enter** to send;
+the answer is appended below a `---` separator (typing stays live during
+the request — it runs on the second core). The whole file is sent as
+context, with `---` lines separating user/assistant turns, so follow-ups
+just work; select-all + delete starts fresh. ESC returns to your writing.
+
+The **provider is configurable** in `claude.json` — set `provider` to
+`anthropic`, `openai`, or `gemini`, or just fill in one of `api_key`
+(Anthropic), `openai_api_key`, or `gemini_api_key` and it auto-picks
+whichever is present. `model` overrides the per-provider default
+(`claude-opus-4-8` / `gpt-4o-mini` / `gemini-2.0-flash`). The same key
+powers grammar check and rewrite. Auth and request shape are handled per
+provider; a bad key or blocked request shows in the status bar.
 
 **Grammar check & rewrite** — Ctrl+G reviews the current file (or just
 the highlighted selection, if there is one) and shows a numbered issue
@@ -96,8 +103,8 @@ Prompts can be overridden with `grammar_system` / `rewrite_system` in
 larger than 8 KB the loaded window is reviewed.
 
 Requires: `wifi.json` (the device's normal WiFi setup) and `claude.json`
-in the drive root — `{"api_key": "sk-ant-...", "model": "claude-opus-4-8",
-"max_tokens": 1024, "system": "..."}`. `claude.json` holds a real API key
+in the drive root (see `claude.json.example` for the multi-provider
+template). `claude.json` holds a real API key
 and is deliberately **not** in this repo (see `.gitignore`). Errors (no
 WiFi, bad key, refusal) show in the status bar and clear on the next
 keypress.

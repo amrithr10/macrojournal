@@ -1,6 +1,9 @@
 {
+  "provider": "anthropic",
   "api_key": "",
-  "model": "claude-opus-4-8",
+  "openai_api_key": "",
+  "gemini_api_key": "",
+  "model": "",
   "max_tokens": 1024,
   "system": "You are answering questions on a small writing device with a 400x300 monochrome text screen. Reply in plain text only - no markdown, no asterisks, no headers, no code fences. Be concise and direct; prefer short paragraphs. Keep answers well under 500 words unless the question truly demands more."
 }
