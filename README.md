@@ -39,9 +39,23 @@ history is per-file and per-window — it resets when you switch files or
 page across the 8 KB window boundary.
 
 **File titles** — the home screen's file list shows each file's first
-line as its title (markdown markers stripped), alongside the word count,
-with `>` marking the currently open file. Titles refresh every time the
-menu opens.
+line as its title (markdown markers stripped, standard font, replaces the
+word count), with `>` marking the currently open file. Titles refresh
+every time the menu opens; protected files show `LOCKED`.
+
+**Per-file passwords (encryption)** — `[P] PASSWORD` on the main menu
+sets a password on the current file: the file is re-written as AES-256-CTR
+ciphertext (PBKDF2-derived key, per-file salt) — plaintext never touches
+the disk, so Drive Mode and sync only ever see unreadable bytes. Opening a
+protected file (menu, Fn+number, or boot) prompts for the password; wrong
+entries can be retried, ESC backs out to the menu. `[P]` on a protected,
+open file offers to remove the password (decrypts in place). The key for
+the open file stays cached until you switch files or power off. **A
+forgotten password means the file is permanently unrecoverable** — there
+is no reset. Known tradeoffs: word counts for large (>8 KB) protected
+files only cover the loaded window, and synced snapshots of the same
+protected file share a keystream (remove + re-add the password to re-key
+if that matters to you).
 
 **Dark mode** — `[I] DARK MODE` on the main menu toggles hardware panel
 inversion (white text on black). Persisted in config, survives reboots;
