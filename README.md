@@ -47,8 +47,10 @@ every time the menu opens; protected files show `LOCKED`.
 the list (bold + framed row); arrows move the highlight (wrapping), Enter
 opens it, `D` jumps to its clear-file confirmation, `P` goes straight to
 its password prompt — set one if it has none, or enter the existing
-password to remove it (no need to open the file first). ESC or `F` exits;
-digits still open directly.
+password to remove it (no need to open the file first). Traverse mode is
+sticky: opening a file and coming back to the menu restores the highlight
+on the file you came from; only ESC or `F` turn it off. Digits still open
+directly.
 
 **Per-file passwords (encryption)** — `[P] PASSWORD` on the main menu
 sets a password on the current file: the file is re-written as AES-256-CTR

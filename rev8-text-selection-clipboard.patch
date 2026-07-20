@@ -43,10 +43,10 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..938be09 100644
+index 966d565..140a85f 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,86 @@
+@@ -6,6 +6,91 @@
  
  //
  #include "service/Editor/Editor.h"
@@ -59,6 +59,11 @@ index 966d565..938be09 100644
 +// password - each action makes the highlighted file the active file
 +// first, so the existing confirmation and password flows apply.
 +static int traverse = -1;
++
++// Traverse mode is sticky: acting on a file (or visiting one) and coming
++// back to the menu restores the highlight on the file you came from.
++// Only ESC or F turn it off.
++static bool traverse_stick = false;
 +
 +// First line of each file, shown as its title in the file list. Loaded
 +// when the home screen opens; 10 tiny reads are instant on the FAT.
@@ -133,7 +138,7 @@ index 966d565..938be09 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,6 +96,12 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,6 +101,20 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -141,12 +146,20 @@ index 966d565..938be09 100644
 +    // refresh the file titles every time the home screen opens
 +    home_load_titles();
 +
-+    //
-+    traverse = -1;
++    // restore the traverse highlight on the active file if the user was
++    // in traverse mode when they left the menu
++    if (traverse_stick)
++    {
++        traverse = app["config"]["file_index"].as<int>();
++        if (traverse > 9)
++            traverse = 0;
++    }
++    else
++        traverse = -1;
  }
  
  //
-@@ -39,10 +125,24 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -39,10 +138,24 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->println(" [S] SYNC ");
      }
  
@@ -171,7 +184,7 @@ index 966d565..938be09 100644
  
      u8->println();
      u8->println(" [B] BACK ");
-@@ -50,16 +150,44 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -50,16 +163,44 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // File Selection
      int pos_x = 190;
      u8->setCursor(pos_x, 45);
@@ -188,16 +201,16 @@ index 966d565..938be09 100644
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int y = 75 + i * 20;
 +        bool hi = (i == traverse);
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        char row[32];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
-+
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
 +        u8->setCursor(pos_x, y);
 +        u8->print(row);
 +
@@ -221,7 +234,7 @@ index 966d565..938be09 100644
      }
      //
      u8->setCursor(pos_x, 290);
-@@ -72,6 +200,85 @@ void Home_keyboard(char key)
+@@ -72,6 +213,87 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -231,6 +244,7 @@ index 966d565..938be09 100644
 +        traverse = (traverse < 0) ? app["config"]["file_index"].as<int>() : -1;
 +        if (traverse > 9)
 +            traverse = 0;
++        traverse_stick = (traverse >= 0);
 +        return;
 +    }
 +    if (traverse >= 0)
@@ -294,6 +308,7 @@ index 966d565..938be09 100644
 +        if (key == 27)
 +        {
 +            traverse = -1;
++            traverse_stick = false;
 +            return;
 +        }
 +
@@ -307,7 +322,7 @@ index 966d565..938be09 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,6 +289,28 @@ void Home_keyboard(char key)
+@@ -82,6 +304,28 @@ void Home_keyboard(char key)
          }
      }
  
@@ -336,7 +351,7 @@ index 966d565..938be09 100644
      else if (key == 'D' || key == 'd')
      {
          // to clear file
-@@ -121,16 +350,9 @@ void Home_keyboard(char key)
+@@ -121,16 +365,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
@@ -357,6 +372,22 @@ index 966d565..938be09 100644
      }
  }
 \ No newline at end of file
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
+index 20809a1..6599c4f 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
+@@ -37,8 +37,9 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     //
+     app["menu"]["state"] = MENU_HOME;
+ 
+-    //
+-    
++    // force the sub-screen setup to re-run: entering the menu again must
++    // refresh the home state (file titles, LOCKED markers)
++    menu_state_prev = -1;
+ }
+ 
+ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 index bade544..a9c9d57 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
