@@ -42,19 +42,93 @@ index c4addfd..504906f 100644
  
  // status storage
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..eac69df 100644
+index 966d565..dbe52d9 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,8 @@
+@@ -6,6 +6,72 @@
  
  //
  #include "service/Editor/Editor.h"
 +#include "../../WordProcessor/WordProcessor.h"
 +#include "../../display_RLCD.h"
++
++// First line of each file, shown as its title in the file list. Loaded
++// when the home screen opens; 10 tiny reads are instant on the FAT.
++static char file_titles[10][32];
++
++static void home_load_titles()
++{
++    for (int i = 0; i < 10; i++)
++    {
++        file_titles[i][0] = '\0';
++
++        String path = format("/%d.txt", i);
++        if (!gfs()->exists(path.c_str()))
++            continue;
++
++        File file = gfs()->open(path.c_str(), "r");
++        if (!file)
++            continue;
++
++        char raw[64];
++        int n = file.read((uint8_t *)raw, sizeof(raw) - 1);
++        file.close();
++        if (n <= 0)
++            continue;
++        raw[n] = '\0';
++
++        // skip leading whitespace and markdown markers so the title reads
++        // clean even when the note starts with "> " or "**"
++        char *psrc = raw;
++        while (*psrc == ' ' || *psrc == '\n' || *psrc == '\r' ||
++               *psrc == '>' || *psrc == '#' || *psrc == '*')
++            psrc++;
++
++        // copy the rest of the first line, whole UTF-8 characters only
++        int out = 0;
++        while (*psrc && *psrc != '\n' && *psrc != '\r')
++        {
++            uint8_t b = (uint8_t)*psrc;
++            int len = 1;
++            if ((b & 0xE0) == 0xC0) len = 2;
++            else if ((b & 0xF0) == 0xE0) len = 3;
++            else if ((b & 0xF8) == 0xF0) len = 4;
++
++            if (out + len > (int)sizeof(file_titles[0]) - 1)
++                break;
++
++            // the 64-byte probe may end mid-character - stop cleanly
++            bool complete = true;
++            for (int k = 1; k < len; k++)
++                if (((uint8_t)psrc[k] & 0xC0) != 0x80)
++                {
++                    complete = false;
++                    break;
++                }
++            if (!complete)
++                break;
++
++            for (int k = 0; k < len; k++)
++                file_titles[i][out++] = psrc[k];
++            psrc += len;
++        }
++        file_titles[i][out] = '\0';
++    }
++}
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -39,10 +41,18 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,6 +82,9 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     //
+     JsonDocument &app = status();
+     app["menu"]["state"] = MENU_HOME;
++
++    // refresh the file titles every time the home screen opens
++    home_load_titles();
+ }
+ 
+ //
+@@ -39,10 +108,18 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->println(" [S] SYNC ");
      }
  
@@ -73,7 +147,28 @@ index 966d565..eac69df 100644
  
      u8->println();
      u8->println(" [B] BACK ");
-@@ -82,6 +92,22 @@ void Home_keyboard(char key)
+@@ -53,14 +130,19 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     u8->print("CHOOSE A FILE");
+ 
+     int file_index = app["config"]["file_index"].as<int>();
++    u8->setFont(u8g2_font_profont12_mf);
+     for (int i = 0; i < 10; i++)
+     {
+         // word count
+         int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
+ 
+         u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
++
++        // "> " marks the open file; first line of the file is its title
++        u8->printf("%c%d %5d  ", i == file_index ? '>' : ' ', i, wordCount);
++        u8->print(file_titles[i][0] ? file_titles[i] : "-");
+     }
++    u8->setFont(u8g2_font_profont17_tf);
+     //
+     u8->setCursor(pos_x, 290);
+     u8->printf(" [D] Clear File # %d", file_index);
+@@ -82,6 +164,22 @@ void Home_keyboard(char key)
          }
      }
  

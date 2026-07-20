@@ -38,6 +38,11 @@ one step (a ~0.6 s pause marks the boundary); up to 10 steps are kept. The
 history is per-file and per-window — it resets when you switch files or
 page across the 8 KB window boundary.
 
+**File titles** — the home screen's file list shows each file's first
+line as its title (markdown markers stripped), alongside the word count,
+with `>` marking the currently open file. Titles refresh every time the
+menu opens.
+
 **Dark mode** — `[I] DARK MODE` on the main menu toggles hardware panel
 inversion (white text on black). Persisted in config, survives reboots;
 everything (bold, underline, selection, quote bars) renders inverted
