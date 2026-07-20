@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..e2ebd29 100644
+index 966d565..2174a0a 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,91 @@
@@ -193,34 +193,32 @@ index 966d565..e2ebd29 100644
 -    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
 -    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
 -        keyboard_layout = "US";
--
--    // Text to be displayed
--    u8->setCursor(0, 40);
--    u8->println();
--    //
 +    // left command column, spaced at 23px so the lines get some air
 +    // (the default println leading reads squished on this panel)
 +    const char *rows[11];
 +    char darkRow[24], pwRow[24];
 +    int nrows = 0;
  
+-    // Text to be displayed
+-    u8->setCursor(0, 40);
+-    u8->println();
+-    //
+-
 -    //
      if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 -    {
 -        u8->println(" [S] SYNC ");
 -    }
 +        rows[nrows++] = " [S] SYNC";
++
++    // Grammana Z (the LLM assistant) - only once claude.json is present
++    if (gfs()->exists("/claude.json"))
++        rows[nrows++] = " [G] GRAMMANA Z";
  
 -    u8->println(" [W] WIFI");
 -    u8->println(" [L] LANGUAGE");
 -    u8->println(" [T] BLE KEYBOARD");
 -    u8->println(" [U] DRIVE MODE");
-+    // Grammana Z (the LLM assistant) - only once claude.json is present
-+    if (gfs()->exists("/claude.json"))
-+        rows[nrows++] = " [G] GRAMMANA Z";
- 
--    u8->println();
--    u8->println(" [B] BACK ");
 +    rows[nrows++] = " [W] WIFI";
 +    rows[nrows++] = " [L] LANGUAGE";
 +    rows[nrows++] = " [T] BLE KEYBOARD";
@@ -236,12 +234,17 @@ index 966d565..e2ebd29 100644
 +                 : "OFF");
 +    rows[nrows++] = pwRow;
 +    rows[nrows++] = " [B] BACK";
-+
+ 
+-    u8->println();
+-    u8->println(" [B] BACK ");
++    // as much leading as the row count allows: airy at 10 rows, and
++    // still clear of the 300px panel edge when SYNC makes it 11
++    int lead = (nrows >= 11) ? 24 : 26;
++    int gap = (nrows >= 11) ? 0 : 8;
 +    for (int i = 0; i < nrows; i++)
 +    {
-+        // the BACK entry sits apart from the rest; 11 rows must still
-+        // clear the 300px panel, so the leading caps at 22px
-+        int y = 52 + i * 22 + (i == nrows - 1 ? 8 : 0);
++        // the BACK entry sits apart from the rest
++        int y = 48 + i * lead + (i == nrows - 1 ? gap : 0);
 +        u8->setCursor(0, y);
 +        u8->print(rows[i]);
 +    }
@@ -262,35 +265,32 @@ index 966d565..e2ebd29 100644
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int y = 72 + i * 22;
 +        bool hi = (i == traverse);
-+
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        char row[32];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +        u8->setCursor(pos_x, y);
 +        u8->print(row);
 +
-+        // traverse highlight: bold the row (transparent overstrikes, so
-+        // the extra passes don't erase the first) and frame it - inverse
-+        // video is unreadable with this menu's opaque glyph rendering
++        // traverse highlight: a 2px frame around the row (bolding the
++        // glyphs read poorly on this panel, and inverse video is
++        // unreadable with this menu's opaque glyph rendering)
 +        if (hi)
 +        {
-+            u8->setFontMode(1);
-+            u8->setCursor(pos_x + 1, y);
-+            u8->print(row);
-+            u8->setCursor(pos_x + 2, y);
-+            u8->print(row);
-+            u8->setFontMode(0);
-+
 +            display->drawLine(pos_x - 4, y - 15, 396, y - 15, 1);
 +            display->drawLine(pos_x - 4, y + 5, 396, y + 5, 1);
 +            display->drawLine(pos_x - 4, y - 15, pos_x - 4, y + 5, 1);
 +            display->drawLine(396, y - 15, 396, y + 5, 1);
++            display->drawLine(pos_x - 5, y - 16, 397, y - 16, 1);
++            display->drawLine(pos_x - 5, y + 6, 397, y + 6, 1);
++            display->drawLine(pos_x - 5, y - 16, pos_x - 5, y + 6, 1);
++            display->drawLine(397, y - 16, 397, y + 6, 1);
 +        }
      }
      //

@@ -41,11 +41,12 @@ page across the 8 KB window boundary.
 **File titles** — the home screen's file list shows each file's first
 line as its title (markdown markers stripped, standard font, replaces the
 word count), with `>` marking the currently open file. Titles refresh
-every time the menu opens; protected files show `LOCKED`. Both menu
-columns are spaced at 22px leading so the lines don't read squished.
+every time the menu opens; protected files show `LOCKED`. The command
+column breathes at 26px leading (24px when SYNC adds an eleventh row)
+and the file list at 22px.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
-the list (bold + framed row); arrows move the highlight (wrapping), Enter
+the list (a 2px frame around the row); arrows move the highlight (wrapping), Enter
 opens it, `D` jumps to its clear-file confirmation (a locked file asks
 for its password first, then continues straight to the confirmation;
 after the delete you land back on the menu, not in the empty file),
