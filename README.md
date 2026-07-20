@@ -38,14 +38,11 @@ one step (a ~0.6 s pause marks the boundary); up to 10 steps are kept. The
 history is per-file and per-window — it resets when you switch files or
 page across the 8 KB window boundary.
 
-**Home screen** — the menu is a full-width file list: each file's first
-line is its title (markdown markers stripped, up to 28 characters), `>`
-marks the open file, and the content size sits right-aligned (protected
-files show `LOCKED`, sized without the encryption header). A key legend
-runs along the bottom; it switches to the traverse hints while
-navigating. Everything rarely used (`[W]` WIFI, `[L]` LANGUAGE, `[T]`
-BLE KEYBOARD, `[U]` DRIVE MODE, `[I]` DARK MODE) moved to the `[C]`
-CONFIG sub-screen. Titles refresh every time the menu opens.
+**File titles** — the home screen's file list shows each file's first
+line as its title (markdown markers stripped, standard font, replaces the
+word count), with `>` marking the currently open file. Titles refresh
+every time the menu opens; protected files show `LOCKED`. Both menu
+columns are spaced at 22px leading so the lines don't read squished.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (bold + framed row); arrows move the highlight (wrapping), Enter
@@ -74,7 +71,7 @@ files only cover the loaded window, and synced snapshots of the same
 protected file share a keystream (remove + re-add the password to re-key
 if that matters to you).
 
-**Dark mode** — `[I] DARK MODE` in `[C]` CONFIG toggles hardware panel
+**Dark mode** — `[I] DARK MODE` on the main menu toggles hardware panel
 inversion (white text on black). Persisted in config, survives reboots;
 everything (bold, underline, selection, quote bars) renders inverted
 automatically.
