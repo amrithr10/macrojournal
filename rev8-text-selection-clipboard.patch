@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..50ceaa2 100644
+index 966d565..17e0b24 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,91 @@
@@ -185,7 +185,7 @@ index 966d565..50ceaa2 100644
  }
  
  //
-@@ -23,47 +122,92 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +122,93 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -282,22 +282,23 @@ index 966d565..50ceaa2 100644
  
 -        u8->setCursor(pos_x, 75 + i * 20);
 -        u8->printf(" [%d]: %zu", i, wordCount);
-+        u8->setCursor(pos_x, y);
-+        u8->print(row);
-+
-+        // traverse highlight: a 2px frame around the row (bolding the
-+        // glyphs read poorly on this panel, and inverse video is
-+        // unreadable with this menu's opaque glyph rendering)
++        // traverse highlight: inverse video - a filled bar with the row
++        // printed white-on-black over it (the bar must be drawn first;
++        // an opaque glyph reprint over an existing row paints patchy)
 +        if (hi)
 +        {
-+            display->drawLine(pos_x - 4, y - 18, 396, y - 18, 1);
-+            display->drawLine(pos_x - 4, y + 6, 396, y + 6, 1);
-+            display->drawLine(pos_x - 4, y - 18, pos_x - 4, y + 6, 1);
-+            display->drawLine(396, y - 18, 396, y + 6, 1);
-+            display->drawLine(pos_x - 5, y - 19, 397, y - 19, 1);
-+            display->drawLine(pos_x - 5, y + 7, 397, y + 7, 1);
-+            display->drawLine(pos_x - 5, y - 19, pos_x - 5, y + 7, 1);
-+            display->drawLine(397, y - 19, 397, y + 7, 1);
++            display->drawFilledRectangle(pos_x - 5, y - 19, 397, y + 7, 1);
++            u8->setForegroundColor(0);
++            u8->setBackgroundColor(1);
++            u8->setCursor(pos_x, y);
++            u8->print(row);
++            u8->setForegroundColor(1);
++            u8->setBackgroundColor(0);
++        }
++        else
++        {
++            u8->setCursor(pos_x, y);
++            u8->print(row);
 +        }
      }
 -    //
@@ -306,7 +307,7 @@ index 966d565..50ceaa2 100644
  }
  
  //
-@@ -72,6 +216,92 @@ void Home_keyboard(char key)
+@@ -72,6 +217,92 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -399,7 +400,7 @@ index 966d565..50ceaa2 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +312,32 @@ void Home_keyboard(char key)
+@@ -82,9 +313,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -433,7 +434,7 @@ index 966d565..50ceaa2 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +374,9 @@ void Home_keyboard(char key)
+@@ -121,16 +375,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {

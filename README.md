@@ -53,7 +53,7 @@ divider separates the command column from the file list, with a rule
 under the file header.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
-the list (a 2px frame around the row); arrows move the highlight (wrapping), Enter
+the list (inverse video: white text on a filled bar); arrows move the highlight (wrapping), Enter
 opens it, `D` jumps to its clear-file confirmation (a locked file asks
 for its password first, then continues straight to the confirmation;
 after the delete you land back on the menu, not in the empty file),
