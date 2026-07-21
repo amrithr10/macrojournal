@@ -54,7 +54,8 @@ panels carry matching inverted header bars (`MENU` / `CHOOSE A FILE`)
 under a centered device title (default `RighterDeck`). Press `N` on the
 home screen to rename the device: type into the header bar (up to 12
 characters), Enter saves (persisted in config.json as `"title"`,
-survives reboots), ESC cancels.
+survives reboots and drops you straight back into the editor), ESC
+cancels. `[N] NAME` also sits in the command column.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (inverse video: white text on a filled bar); arrows move the highlight (wrapping), Enter

@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..5151bb6 100644
+index 966d565..de8499a 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,96 @@
@@ -190,7 +190,7 @@ index 966d565..5151bb6 100644
  }
  
  //
-@@ -23,47 +127,106 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +127,107 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -200,7 +200,7 @@ index 966d565..5151bb6 100644
 -        keyboard_layout = "US";
 +    // left command column, spaced at 23px so the lines get some air
 +    // (the default println leading reads squished on this panel)
-+    const char *rows[11];
++    const char *rows[12];
 +    char darkRow[24], pwRow[24];
 +    int nrows = 0;
  
@@ -240,6 +240,7 @@ index 966d565..5151bb6 100644
 +                 ? "ON"
 +                 : "OFF");
 +    rows[nrows++] = pwRow;
++    rows[nrows++] = " [N] NAME";
 +    rows[nrows++] = " [B] BACK";
  
      // File Selection
@@ -274,7 +275,7 @@ index 966d565..5151bb6 100644
 +
 +    // command rows start level with the file rows; as much leading as
 +    // the row count allows while BACK stays clear of the panel edge
-+    int lead = (nrows >= 10) ? 24 : 26;
++    int lead = (nrows >= 11) ? 22 : (nrows >= 10) ? 24 : 26;
 +    int gap = (nrows >= 10) ? 0 : 8;
 +    for (int i = 0; i < nrows; i++)
 +    {
@@ -326,7 +327,7 @@ index 966d565..5151bb6 100644
  }
  
  //
-@@ -72,6 +235,129 @@ void Home_keyboard(char key)
+@@ -72,6 +236,131 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -345,6 +346,8 @@ index 966d565..5151bb6 100644
 +                config_save();
 +            }
 +            naming = false;
++            // renaming is a one-shot errand - straight back to writing
++            app["screen"] = WORDPROCESSOR;
 +        }
 +        else if (key == '\b')
 +        {
@@ -456,7 +459,7 @@ index 966d565..5151bb6 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +368,32 @@ void Home_keyboard(char key)
+@@ -82,9 +371,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -490,7 +493,7 @@ index 966d565..5151bb6 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +430,9 @@ void Home_keyboard(char key)
+@@ -121,16 +433,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
