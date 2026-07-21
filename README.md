@@ -37,28 +37,30 @@ browser-based step and does not erase your journal files.
 The menu (toolbar title: **RighterDeck** — rename it with `[N]`) is two
 panels under matching inverted headers, split by a divider:
 
-- **MENU** — the commands, alphabetical: BLE KEYS, DARK, DRIVE, FILES,
-  GRAMMANA Z (shown once `grammana_z.json` exists), LANGUAGE, NAME, PWD,
-  SYNC (shown once sync is configured), WIFI, and BACK. Press the
-  bracketed key.
-- **CHOOSE A FILE** — the ten file slots. Each row shows the file's
-  first line as its title (markdown markers stripped, first 13
-  characters) and `>` marks the open file. Protected files show
-  `LOCKED`. Titles refresh every time the menu opens. Press `0-9` to
-  open a file directly.
+- **MENU** — the commands, alphabetical: BLE KEYS, DARK, DEVICE NAME,
+  DRIVE, FILES, LANGUAGE, SYNC (shown once sync is configured), WIFI,
+  and BACK. Press the bracketed key.
+- **CHOOSE A FILE** — the two built-in tools (SCRATCHPAD, GRAMMANA Z)
+  pinned at the top, then the ten notes 0–9 in a scrolling window (a
+  down-chevron shows when more notes sit below). Each note row is its
+  first line as a title (markdown markers stripped) and `>` marks the
+  open file/tool; protected notes show `LOCKED`. Titles refresh every
+  time the menu opens. Press `0-9` to open a note directly.
 
-**File navigation (`F`)** — press `F` and a file row highlights in
-inverse video; the left pane switches from the command list to the file
-actions for that row. Arrows move the highlight (wrapping), and the
-actions target it: **Enter** opens it, **D** clears it (password-verified
-for locked files, straight into the usual confirmation, and back to the
-menu afterwards), **P** opens its password flow. The command keys (`S`,
-`G`, `W`, …) are inactive while traversing — `F` or ESC exits back to
-the command pane. The highlight is sticky: open a file and come back,
-and it's still where you left it.
+**File navigation (`F`)** — press `F` and a row highlights in inverse
+video; the left pane switches from the command list to the actions for
+that row. Arrows move the highlight through all twelve entries
+(Scratchpad, Grammana Z, then notes 0–9), wrapping at the ends, and the
+notes scroll to keep the highlight in view while the two tools stay
+pinned. **Enter** opens the highlighted item. For notes only, **D**
+clears it (password-verified for locked notes, straight into the usual
+confirmation, then back to the menu) and **P** opens its password flow —
+the tools show just OPEN. The command keys are inactive while
+traversing; `F` or ESC exits. The highlight is sticky: open something
+and come back, and it's still where you left it.
 
 **Rename the device (`N`)** — the toolbar title (default **RighterDeck**)
-is yours to change: press `[N]` on the menu, type a new name into the
+is yours to change: press `[N] DEVICE NAME` on the menu, type a new name into the
 header bar (up to 12 characters), and press Enter — it saves and drops
 you straight back into the editor (ESC cancels). The name shows at the
 top of the menu from then on and persists across reboots (stored in
@@ -84,7 +86,7 @@ interchangeable in every shortcut below.
 | Delete word left | Ctrl + Backspace |
 | Undo / redo | Ctrl + Z / Y |
 | Bold / italic markers | Ctrl + B / I |
-| To-do scratchpad | Ctrl+Shift + N |
+| Scratchpad | Ctrl+Shift + S |
 | Grammana Z assistant | Ctrl+Shift + C |
 | Grammar check | Ctrl + G |
 | Grammar rewrite | Ctrl+Shift + G |
@@ -108,14 +110,15 @@ selection in markers (or insert an empty pair to type into).
 
 ### Per-file passwords (real encryption)
 
-`[P]` sets a password on the current file (`P` in file navigation works
-on the highlighted file without opening it). The file is re-written as
+Password management lives in file navigation: press `F`, highlight a
+note, and `P` sets or removes its password (locked notes verify the old
+password first) without opening it. The file is re-written as
 **AES-256-CTR ciphertext** — plaintext never touches the disk again, so
 Drive Mode and sync only ever see unreadable bytes. Opening a protected
 file prompts for the password; wrong entries can be retried; ESC backs
-out. **Leaving a file to the menu re-locks it.** `[P]` on a protected
-file asks for the password and removes the protection (decrypts in
-place).
+out. **Leaving a file to the menu re-locks it.** `P` on a protected note
+in file navigation asks for the password and removes the protection
+(decrypts in place).
 
 > **A forgotten password means the file is permanently unrecoverable.**
 > There is no reset, no recovery, no backdoor. Test the flow on a
@@ -138,7 +141,8 @@ ciphertext.
 
 ### Grammana Z (LLM assistant)
 
-`[G]` on the menu or Ctrl+Shift+C in the editor opens the assistant
+The GRAMMANA Z row in the file list (or `G` on the home screen, or
+Ctrl+Shift+C in the editor) opens the assistant
 (status bar `GZ`). Type a question, press **Shift+Enter** to send — the
 request runs on the second core, so typing stays live. The answer is
 appended under a `---` separator; the whole file is the conversation
@@ -158,11 +162,12 @@ Either way the original is never modified; ESC returns to it, and each
 run replaces the previous report. For files over 8 KB the loaded window
 is reviewed.
 
-### To-do scratchpad
+### Scratchpad
 
-Ctrl+Shift+N from anywhere opens a plain-text scratchpad (status bar
-`TODO`); ESC saves and returns to the file you were in. It lives in
-hidden slot 10 (`10.txt` on the drive, included in sync).
+Ctrl+Shift+S from anywhere (or the SCRATCHPAD row in the file list)
+opens a plain-text scratchpad (status bar `SCRATCHPAD`); ESC saves and
+returns to the file you were in. It lives in slot 10 (`10.txt` on the
+drive, included in sync).
 
 ### Dark mode
 
