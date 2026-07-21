@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..1524b90 100644
+index 966d565..a8ad3f5 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,96 @@
@@ -219,8 +219,8 @@ index 966d565..1524b90 100644
 -    {
 -        u8->println(" [S] SYNC ");
 -    }
-+    // Grammana Z (the LLM assistant) - only once claude.json is present
-+    if (gfs()->exists("/claude.json"))
++    // Grammana Z (the LLM assistant) - only once grammana_z.json is present
++    if (gfs()->exists("/grammana_z.json"))
 +        rows[nrows++] = "[G] GRAMMANA Z";
  
 -    u8->println(" [W] WIFI");
@@ -229,7 +229,7 @@ index 966d565..1524b90 100644
 -    u8->println(" [U] DRIVE MODE");
 +    rows[nrows++] = "[L] LANGUAGE";
 +    rows[nrows++] = "[N] NAME";
-+    snprintf(pwRow, sizeof(pwRow), "[P] PASS: %s",
++    snprintf(pwRow, sizeof(pwRow), "[P] PWD: %s",
 +             crypt_is_encrypted(
 +                 format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
 +                 ? "ON"
@@ -467,7 +467,7 @@ index 966d565..1524b90 100644
 +    else if (key == 'G' || key == 'g')
 +    {
 +        // open Grammana Z (only if configured)
-+        if (gfs()->exists("/claude.json"))
++        if (gfs()->exists("/grammana_z.json"))
 +            WP_requestAskClaude();
 +    }
 +
@@ -1843,7 +1843,7 @@ index aa3d65d..74e0ab1 100644
  
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 new file mode 100644
-index 0000000..7a9a290
+index 0000000..6b66695
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.cpp
 @@ -0,0 +1,611 @@
@@ -1884,7 +1884,7 @@ index 0000000..7a9a290
 +static volatile int _mode = MODE_CONVERSATION;
 +static volatile bool _answer_grammar = false;
 +
-+// /claude.json
++// /grammana_z.json
 +static String _api_key = "";
 +static String _model = "claude-opus-4-8";
 +static int _max_tokens = 1024;
@@ -1894,7 +1894,7 @@ index 0000000..7a9a290
 +static int _provider = PROV_ANTHROPIC;
 +static String _default_model = "claude-opus-4-8";
 +
-+// default reviewer instructions; override with "grammar_system" in claude.json
++// default reviewer instructions; override with "grammar_system" in grammana_z.json
 +static const char *GRAMMAR_SYSTEM_DEFAULT =
 +    "You are a careful copy editor. The user sends a piece of writing from a "
 +    "small plain-text writing device. List the grammar, spelling and "
@@ -1904,7 +1904,7 @@ index 0000000..7a9a290
 +    "are fine. End with one short line on overall quality. If there are no "
 +    "issues, just say the text looks clean.";
 +
-+// override with "rewrite_system" in claude.json
++// override with "rewrite_system" in grammana_z.json
 +static const char *REWRITE_SYSTEM_DEFAULT =
 +    "You are a careful copy editor. The user sends a piece of writing from a "
 +    "small plain-text writing device. Rewrite it with grammar, spelling and "
@@ -1937,19 +1937,19 @@ index 0000000..7a9a290
 +    _log("[askclaude] error: %s\n", message);
 +}
 +
-+// load /claude.json from the drive
++// load /grammana_z.json from the drive
 +static bool ask_load_config()
 +{
-+    if (!gfs()->exists("/claude.json"))
++    if (!gfs()->exists("/grammana_z.json"))
 +    {
-+        ask_fail("NO claude.json");
++        ask_fail("NO grammana_z.json");
 +        return false;
 +    }
 +
-+    File file = gfs()->open("/claude.json", "r");
++    File file = gfs()->open("/grammana_z.json", "r");
 +    if (!file)
 +    {
-+        ask_fail("claude.json OPEN FAIL");
++        ask_fail("grammana_z.json OPEN FAIL");
 +        return false;
 +    }
 +
@@ -1959,7 +1959,7 @@ index 0000000..7a9a290
 +
 +    if (err)
 +    {
-+        ask_fail("claude.json BAD JSON");
++        ask_fail("grammana_z.json BAD JSON");
 +        return false;
 +    }
 +
@@ -2401,7 +2401,7 @@ index 0000000..7a9a290
 +    }
 +
 +    if (truncated)
-+        answer += "\n[cut off - raise max_tokens in claude.json]";
++        answer += "\n[cut off - raise max_tokens in grammana_z.json]";
 +
 +    _answer = answer;
 +    _answer_grammar = (_mode != MODE_CONVERSATION);
@@ -2460,7 +2460,7 @@ index 0000000..7a9a290
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
 new file mode 100644
-index 0000000..c02ec6f
+index 0000000..aeebb64
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/service/AskClaude/AskClaude.h
 @@ -0,0 +1,39 @@
@@ -2476,7 +2476,7 @@ index 0000000..c02ec6f
 +// side polls askclaude_answer_ready() and injects the answer into the
 +// editor buffer on its own core.
 +//
-+// Configuration lives in /claude.json on the drive:
++// Configuration lives in /grammana_z.json on the drive:
 +//   { "api_key": "sk-ant-...", "model": "claude-opus-4-8",
 +//     "max_tokens": 1024, "system": "..." }
 +//

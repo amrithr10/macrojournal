@@ -19,7 +19,7 @@ browser-based step and does not erase your journal files.
 | `firmware_rev_8.bin` | Ready-to-flash merged image (bootloader + partitions + app). Flash at address **0x0**. |
 | `rev8-text-selection-clipboard.patch` | The full source diff against upstream — the source of truth for this mod. |
 | `keyboard.json` | A custom key layout with the mod's key names wired in (see [keyboard.json](#keyboardjson)). |
-| `claude.json.example` | Template for the LLM assistant configuration. Copy to the device as `claude.json` with your API key. |
+| `grammana_z.json.example` | Template for the LLM assistant configuration. Copy to the device as `grammana_z.json` with your API key. |
 
 ## Quick start
 
@@ -29,7 +29,7 @@ browser-based step and does not erase your journal files.
    (about a minute). Unlike official releases, this image does **not**
    wipe the data partition — your files survive.
 3. Optional, for the LLM features: enter Drive Mode (`[U]` on the menu),
-   copy `claude.json` (from `claude.json.example`, with a real API key)
+   copy `grammana_z.json` (from `grammana_z.json.example`, with a real API key)
    into the drive root, and set up WiFi on the device (`[W]`).
 
 ## The menu
@@ -38,7 +38,7 @@ The menu (toolbar title: **RighterDeck** — rename it with `[N]`) is two
 panels under matching inverted headers, split by a divider:
 
 - **MENU** — the commands, alphabetical: BLE KEYS, DARK, DRIVE, FILES,
-  GRAMMANA Z (shown once `claude.json` exists), LANGUAGE, NAME, PASS,
+  GRAMMANA Z (shown once `grammana_z.json` exists), LANGUAGE, NAME, PWD,
   SYNC (shown once sync is configured), WIFI, and BACK. Press the
   bracketed key.
 - **CHOOSE A FILE** — the ten file slots. Each row shows the file's
@@ -55,9 +55,13 @@ menu afterwards), **P** opens its password flow. The highlight is sticky
 — open a file and come back, and it's still where you left it. ESC or
 `F` exits.
 
-**Rename (`N`)** — type the new device name into the header bar (up to
-12 characters); Enter saves and returns to the editor, ESC cancels. The
-name persists in `config.json` as `"title"`.
+**Rename the device (`N`)** — the toolbar title (default **RighterDeck**)
+is yours to change: press `[N]` on the menu, type a new name into the
+header bar (up to 12 characters), and press Enter — it saves and drops
+you straight back into the editor (ESC cancels). The name shows at the
+top of the menu from then on and persists across reboots (stored in
+`config.json` as `"title"`, so you can also set it from a computer in
+Drive Mode).
 
 ## Editor shortcuts
 
@@ -140,7 +144,7 @@ appended under a `---` separator; the whole file is the conversation
 starts fresh; ESC returns to your writing.
 
 Works with **Anthropic, OpenAI, or Google Gemini** — see
-[claude.json](#claudejson).
+[grammana_z.json](#grammana_zjson).
 
 ### Grammar check and rewrite
 
@@ -168,10 +172,10 @@ across reboots.
 
 All three live in the drive root (Drive Mode: `[U]` on the menu).
 
-### claude.json
+### grammana_z.json
 
 Required only for Grammana Z and grammar check. Start from
-`claude.json.example`:
+`grammana_z.json.example`:
 
 | Field | Meaning |
 |---|---|
@@ -204,7 +208,7 @@ reverting to stock firmware.
 
 ## Security notes (read before sharing files or keys)
 
-- Your `claude.json` holds a real API key — it stays on the device and
+- Your `grammana_z.json` holds a real API key — it stays on the device and
   is sent only as an auth header to the configured provider. It is
   **git-ignored here and has never been committed**; keep it that way
   if you fork this repo.
