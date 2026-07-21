@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..de2c5b1 100644
+index 966d565..62a3ba9 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,135 @@
@@ -89,7 +89,7 @@ index 966d565..de2c5b1 100644
 +// The three pins stay put; only the notes scroll. Enter opens the item;
 +// D/P act on real notes only.
 +#define TRAV_COUNT 13
-+#define NOTE_VIS 8 // notes visible at once (10 total -> 2 can scroll)
++#define LIST_VIS 10 // file rows visible at once (13 total -> 3 scroll)
 +
 +static bool trav_is_pin(int t) { return t <= 2; }
 +static int trav_note(int t) { return t - 3; } // valid when t >= 3
@@ -98,8 +98,8 @@ index 966d565..de2c5b1 100644
 +static int traverse = -1;
 +static bool traverse_stick = false;
 +
-+// first visible note in the scrolling window (0..2)
-+static int note_scroll = 0;
++// first visible entry in the scrolling file list (0..3)
++static int list_scroll = 0;
 +
 +// Highlighted command in the left menu (arrow navigation). Sticky across
 +// menu visits; clamped to the live command count.
@@ -114,17 +114,17 @@ index 966d565..de2c5b1 100644
 +static int name_len = 0;
 +
 +// keep the highlighted note inside the scroll window
-+static void ensure_note_visible(int note)
++static void ensure_entry_visible(int e)
 +{
-+    if (note < note_scroll)
-+        note_scroll = note;
-+    else if (note >= note_scroll + NOTE_VIS)
-+        note_scroll = note - NOTE_VIS + 1;
++    if (e < list_scroll)
++        list_scroll = e;
++    else if (e >= list_scroll + LIST_VIS)
++        list_scroll = e - LIST_VIS + 1;
 +
-+    if (note_scroll < 0)
-+        note_scroll = 0;
-+    if (note_scroll > 10 - NOTE_VIS)
-+        note_scroll = 10 - NOTE_VIS;
++    if (list_scroll < 0)
++        list_scroll = 0;
++    if (list_scroll > TRAV_COUNT - LIST_VIS)
++        list_scroll = TRAV_COUNT - LIST_VIS;
 +}
 +
 +// traverse position for a given active file index
@@ -208,7 +208,7 @@ index 966d565..de2c5b1 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,54 +145,222 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,54 +145,225 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -216,15 +216,14 @@ index 966d565..de2c5b1 100644
 +    // refresh the note titles every time the home screen opens
 +    home_load_titles();
 +
-+    note_scroll = 0;
++    list_scroll = 0;
 +
 +    // restore the traverse highlight on the active file if the user was
 +    // in traverse mode when they left the menu
 +    if (traverse_stick)
 +    {
 +        traverse = trav_for_file(app["config"]["file_index"].as<int>());
-+        if (traverse >= 3)
-+            ensure_note_visible(trav_note(traverse));
++        ensure_entry_visible(traverse);
 +    }
 +    else
 +        traverse = -1;
@@ -263,10 +262,8 @@ index 966d565..de2c5b1 100644
 +
 +static const int DIV_X = 184;   // column divider
 +static const int FILE_X = 188;  // file text left edge
-+static const int TOOL_Y[3] = {74, 92, 110};
-+static const int SEP_Y = 119;
-+static const int NOTE_Y0 = 134;
-+static const int NOTE_LEAD = 20;
++static const int LIST_Y0 = 74;  // first file row
++static const int LIST_LEAD = 22;
 +
 +// draw one file-pane row, inverting it when highlighted
 +static void draw_frow(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8,
@@ -384,50 +381,56 @@ index 966d565..de2c5b1 100644
 -    u8->println(" [L] LANGUAGE");
 -    u8->println(" [T] BLE KEYBOARD");
 -    u8->println(" [U] DRIVE MODE");
-+    // RIGHT PANE - three pinned entries
-+    char pin[20];
-+    snprintf(pin, sizeof(pin), "%cSCRATCHPAD", file_index == 10 ? '>' : ' ');
-+    draw_frow(display, u8, TOOL_Y[0], pin, traverse == 0);
-+    snprintf(pin, sizeof(pin), "%cGRAMMANA Z", file_index == 11 ? '>' : ' ');
-+    draw_frow(display, u8, TOOL_Y[1], pin, traverse == 1);
-+    snprintf(pin, sizeof(pin), " LAST NOTE %d",
-+             app["config"]["last_note"].as<int>());
-+    draw_frow(display, u8, TOOL_Y[2], pin, traverse == 2);
++    // RIGHT PANE - one scrolling list: the three tool entries, a thin
++    // separator, then the ten notes
++    for (int v = 0; v < LIST_VIS; v++)
++    {
++        int e = list_scroll + v;
++        if (e >= TRAV_COUNT)
++            break;
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+    // separator between the pins and the scrolling notes
-+    display->drawLine(FILE_X - 6, SEP_Y, 397, SEP_Y, 1);
++        int y = LIST_Y0 + v * LIST_LEAD;
++        char row[24];
++        if (e == 0)
++            snprintf(row, sizeof(row), "%cSCRATCHPAD",
++                     file_index == 10 ? '>' : ' ');
++        else if (e == 1)
++            snprintf(row, sizeof(row), "%cGRAMMANA Z",
++                     file_index == 11 ? '>' : ' ');
++        else if (e == 2)
++            snprintf(row, sizeof(row), " LAST NOTE %d",
++                     app["config"]["last_note"].as<int>());
++        else
++        {
++            int note = e - 3;
++            snprintf(row, sizeof(row), "%c[%d] %s",
++                     note == file_index ? '>' : ' ', note,
++                     file_titles[note][0] ? file_titles[note] : "-");
++        }
  
 -    // File Selection
 -    int pos_x = 190;
 -    u8->setCursor(pos_x, 45);
 -    u8->print("CHOOSE A FILE");
-+    // notes window
-+    for (int v = 0; v < NOTE_VIS; v++)
-+    {
-+        int note = note_scroll + v;
-+        if (note >= 10)
-+            break;
++        draw_frow(display, u8, y, row, traverse == e);
  
 -    int file_index = app["config"]["file_index"].as<int>();
 -    for (int i = 0; i < 10; i++)
-+        int y = NOTE_Y0 + v * NOTE_LEAD;
-+        char row[24];
-+        snprintf(row, sizeof(row), "%c[%d] %s",
-+                 note == file_index ? '>' : ' ', note,
-+                 file_titles[note][0] ? file_titles[note] : "-");
-+
-+        draw_frow(display, u8, y, row, traverse == note + 3);
++        // thin separator just below LAST NOTE, dividing tools from notes,
++        // whenever that boundary is on screen
++        if (e == 2)
++            display->drawLine(FILE_X - 6, y + 8, 397, y + 8, 1);
 +    }
 +
-+    // down chevron when notes remain below the window
-+    if (note_scroll + NOTE_VIS < 10)
++    // down chevron when entries remain below the window
++    if (list_scroll + LIST_VIS < TRAV_COUNT)
      {
 -        // word count
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int ax = (FILE_X + 397) / 2;
-+        int ay = 289;
++        int ay = 291;
 +        display->drawLine(ax - 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax + 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax - 8, ay + 1, ax, ay + 7, 1);
@@ -461,7 +464,7 @@ index 966d565..de2c5b1 100644
  }
  
  //
-@@ -72,65 +369,221 @@ void Home_keyboard(char key)
+@@ -72,65 +372,218 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -511,8 +514,7 @@ index 966d565..de2c5b1 100644
 +        if (traverse < 0)
 +        {
 +            traverse = trav_for_file(app["config"]["file_index"].as<int>());
-+            if (traverse >= 3)
-+                ensure_note_visible(trav_note(traverse));
++            ensure_entry_visible(traverse);
 +            traverse_stick = true;
 +        }
 +        else
@@ -529,15 +531,13 @@ index 966d565..de2c5b1 100644
 +        if (key == 20 || key == 18)
 +        {
 +            traverse = (traverse + TRAV_COUNT - 1) % TRAV_COUNT;
-+            if (traverse >= 3)
-+                ensure_note_visible(trav_note(traverse));
++            ensure_entry_visible(traverse);
 +            return;
 +        }
 +        if (key == 21 || key == 19)
 +        {
 +            traverse = (traverse + 1) % TRAV_COUNT;
-+            if (traverse >= 3)
-+                ensure_note_visible(trav_note(traverse));
++            ensure_entry_visible(traverse);
 +            return;
 +        }
 +
