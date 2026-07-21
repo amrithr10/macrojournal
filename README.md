@@ -1,139 +1,228 @@
-# Micro Journal Rev 8 — Text Selection, Clipboard & Navigation Mod
+# RighterDeck — a Micro Journal Rev 8 firmware mod
 
-Custom firmware for the Micro Journal Rev 8 (ESP32-S3 writerdeck by unkyulee)
-adding text selection with inverse-video highlight, copy/cut/paste, and
-word/line/document navigation to the built-in editor.
+Custom firmware for the [Micro Journal Rev 8](https://github.com/unkyulee/micro-journal)
+(the ESP32-S3 writerdeck by Un Kyu Lee) that turns the stock editor into a
+small but complete writing environment: text selection and clipboard, word
+and document navigation, undo/redo, live markdown styling, per-file
+AES-256 encryption, file titles and quick file navigation, a to-do
+scratchpad, dark mode, and an on-device LLM assistant ("Grammana Z") with
+grammar checking and rewriting — all driven from the keyboard, all
+rendered for the 400x300 reflective LCD.
 
-## Files
+Everything runs on the stock hardware. Flashing is a one-file,
+browser-based step and does not erase your journal files.
+
+## What's in this repository
 
 | File | Purpose |
 |---|---|
-| `firmware_rev_8.bin` | Merged flash image (bootloader + partitions + app). Flash at address **0x0**. |
-| `rev8-text-selection-clipboard.patch` | Full source diff — the source of truth for the mod. |
-| `keyboard.json` | Custom key layout (backtick next to A, extra Shift, `"` on backslash key) with the new selection/modifier keys wired in. Copy to the device drive root via Drive Mode. Only valid with this firmware — remove it if reverting to stock. |
+| `firmware_rev_8.bin` | Ready-to-flash merged image (bootloader + partitions + app). Flash at address **0x0**. |
+| `rev8-text-selection-clipboard.patch` | The full source diff against upstream — the source of truth for this mod. |
+| `keyboard.json` | A custom key layout with the mod's key names wired in (see [keyboard.json](#keyboardjson)). |
+| `claude.json.example` | Template for the LLM assistant configuration. Copy to the device as `claude.json` with your API key. |
 
-## Shortcuts
+## Quick start
 
-Ctrl and GUI are the two keys left of the spacebar; both work identically.
+1. Connect the **upper** USB-C port to a computer and open
+   <https://www.espboards.dev/tools/program/> in Chrome or Edge.
+2. Connect → choose `firmware_rev_8.bin` → set address **0x0** → Program
+   (about a minute). Unlike official releases, this image does **not**
+   wipe the data partition — your files survive.
+3. Optional, for the LLM features: enter Drive Mode (`[U]` on the menu),
+   copy `claude.json` (from `claude.json.example`, with a real API key)
+   into the drive root, and set up WiFi on the device (`[W]`).
 
-**Navigation** — Ctrl+←/→: word · Home/End: line start/end (also with Ctrl,
-or Ctrl+Shift) · Ctrl+PgUp/PgDn: start/end of the whole document (crosses
-the 8 KB window, saves first).
+## The menu
 
-**Selection** — Shift+arrows: character/line · Ctrl+Shift+←/→: word ·
-Ctrl+Shift+↑/↓: line · Shift+Home/End: to line start/end · Ctrl+A: all.
+The menu (toolbar title: **RighterDeck** — rename it with `[N]`) is two
+panels under matching inverted headers, split by a divider:
 
-**Clipboard** — Ctrl+C / X / V: copy / cut / paste (2 KB clipboard,
-UTF-8 safe). Ctrl+Backspace deletes the word left of the cursor.
+- **MENU** — the commands, alphabetical: BLE KEYS, DARK, DRIVE, FILES,
+  GRAMMANA Z (shown once `claude.json` exists), LANGUAGE, NAME, PASS,
+  SYNC (shown once sync is configured), WIFI, and BACK. Press the
+  bracketed key.
+- **CHOOSE A FILE** — the ten file slots. Each row shows the file's
+  first line as its title (markdown markers stripped, first 13
+  characters) and `>` marks the open file. Protected files show
+  `LOCKED`. Titles refresh every time the menu opens. Press `0-9` to
+  open a file directly.
 
-**Formatting (markdown-styled)** — files stay plain text; the Rev 8 screen
-styles markdown as you type: `**bold**` renders bold (double-strike),
-`*italic*` renders underlined, and `> quote` paragraphs get a bar in the
-left margin. Ctrl+B / Ctrl+I wrap the current selection in markers (or
-insert an empty pair to type into). Markers stay visible; emphasis resets
-at each newline.
+**File navigation (`F`)** — press `F` and a file row highlights in
+inverse video; arrows move it (wrapping), and actions target the
+highlighted file: **Enter** opens it, **D** clears it (password-verified
+for locked files, straight into the usual confirmation, and back to the
+menu afterwards), **P** opens its password flow. The highlight is sticky
+— open a file and come back, and it's still where you left it. ESC or
+`F` exits.
 
-**Undo / redo** — Ctrl+Z undo, Ctrl+Y redo. Bursts of typing collapse into
-one step (a ~0.6 s pause marks the boundary); up to 10 steps are kept. The
-history is per-file and per-window — it resets when you switch files or
-page across the 8 KB window boundary.
+**Rename (`N`)** — type the new device name into the header bar (up to
+12 characters); Enter saves and returns to the editor, ESC cancels. The
+name persists in `config.json` as `"title"`.
 
-**File titles** — the home screen's file list shows each file's first
-line as its title (markdown markers stripped, standard font, replaces the
-word count), with `>` marking the currently open file. Titles refresh
-every time the menu opens; protected files show `LOCKED`. The whole
-menu and every dialog (password prompt, WiFi setup, sync, clear
-confirmation, firmware update) render in profont22 — the editor's
-default and the one font that reads cleanly on this panel (profont17
-packs letters nearly touching). Command labels are shortened to fit
-the wider glyphs (same keys: `[G] GRAMMANA`, `[T] BLE KEYS`,
-`[U] DRIVE`, `[I] DARK`, `[F] FILES`, `[P] PASS`); titles cap at 13
-characters and the traverse hint reads `ENTER D P ESC`. A vertical
-divider separates the command column from the file list, and both
-panels carry matching inverted header bars (`MENU` / `CHOOSE A FILE`)
-under a centered device title (default `RighterDeck`). Press `N` on the
-home screen to rename the device: type into the header bar (up to 12
-characters), Enter saves (persisted in config.json as `"title"`,
-survives reboots and drops you straight back into the editor), ESC
-cancels. `[N] NAME` also sits in the command column.
+## Editor shortcuts
 
-**File traverse mode** — `[F]` on the home screen highlights a file in
-the list (inverse video: white text on a filled bar); arrows move the highlight (wrapping), Enter
-opens it, `D` jumps to its clear-file confirmation (a locked file asks
-for its password first, then continues straight to the confirmation;
-after the delete you land back on the menu, not in the empty file),
-`P` goes straight to
-its password prompt — set one if it has none, or enter the existing
-password to remove it (no need to open the file first). Traverse mode is
-sticky: opening a file and coming back to the menu restores the highlight
-on the file you came from; only ESC or `F` turn it off. Digits still open
-directly.
+Ctrl and GUI are the two keys left of the spacebar; they are
+interchangeable in every shortcut below.
 
-**Per-file passwords (encryption)** — `[P] PASSWORD` on the main menu
-sets a password on the current file: the file is re-written as AES-256-CTR
-ciphertext (PBKDF2-derived key, per-file salt) — plaintext never touches
-the disk, so Drive Mode and sync only ever see unreadable bytes. Opening a
-protected file (menu, Fn+number, or boot) prompts for the password; wrong
-entries can be retried, ESC backs out to the menu. **Leaving a file to
-the menu re-locks it** — re-entering always prompts again. `[P]` on a
-protected file asks for its password and then removes the protection
-(decrypts in place). **A
-forgotten password means the file is permanently unrecoverable** — there
-is no reset. Known tradeoffs: word counts for large (>8 KB) protected
-files only cover the loaded window, and synced snapshots of the same
-protected file share a keystream (remove + re-add the password to re-key
-if that matters to you).
+| Action | Keys |
+|---|---|
+| Select character / line | Shift + arrows |
+| Select word | Ctrl+Shift + ←/→ |
+| Select line | Ctrl+Shift + ↑/↓ |
+| Select to line start/end | Shift + Home/End |
+| Select all | Ctrl + A |
+| Copy / cut / paste | Ctrl + C / X / V |
+| Move by word | Ctrl + ←/→ |
+| Line start / end | Home / End (with or without Ctrl/Shift) |
+| Document start / end | Ctrl + PgUp / PgDn |
+| Delete word left | Ctrl + Backspace |
+| Undo / redo | Ctrl + Z / Y |
+| Bold / italic markers | Ctrl + B / I |
+| To-do scratchpad | Ctrl+Shift + N |
+| Grammana Z assistant | Ctrl+Shift + C |
+| Grammar check | Ctrl + G |
+| Grammar rewrite | Ctrl+Shift + G |
 
-**Dark mode** — `[I] DARK MODE` on the main menu toggles hardware panel
-inversion (white text on black). Persisted in config, survives reboots;
-everything (bold, underline, selection, quote bars) renders inverted
-automatically.
+Selections render in inverse video. Typing replaces the selection;
+Backspace/DEL deletes it; plain movement drops it. The clipboard holds
+2 KB and is UTF-8 safe.
 
-**To-do scratchpad** — Ctrl+Shift+N from the editor or the menu opens a
-plain-text scratchpad (status bar shows `TODO`); ESC saves it and returns
-to the file you were in. The scratchpad is hidden file slot 10 — it lives
-on the drive as `10.txt` (visible in Drive Mode, included in sync), and
-Fn+0–9 can't reach it. Switching files with Fn+number while in the
-scratchpad leaves it like any other file.
+**Undo/redo** keeps up to 10 steps; bursts of typing collapse into one
+step (a ~0.6 s pause marks the boundary). History is per-file and
+per-window — it resets when you switch files or page across the 8 KB
+window boundary.
 
-**Grammana Z (LLM assistant)** — `[G] GRAMMANA Z` on the home menu (or
-Ctrl+Shift+C in the editor) opens the assistant screen (hidden file slot
-11, status bar `GZ`). Type a question, press **Shift+Enter** to send;
-the answer is appended below a `---` separator (typing stays live during
-the request — it runs on the second core). The whole file is sent as
-context, with `---` lines separating user/assistant turns, so follow-ups
-just work; select-all + delete starts fresh. ESC returns to your writing.
+**Markdown styling** — files stay plain text; the screen styles as you
+type: `**bold**` renders double-struck, `*italic*` renders underlined,
+and `> quote` paragraphs get a bar in the left margin and continue on
+Enter until an empty line ends them. Ctrl+B / Ctrl+I wrap the current
+selection in markers (or insert an empty pair to type into).
 
-The **provider is configurable** in `claude.json` — set `provider` to
-`anthropic`, `openai`, or `gemini`, or just fill in one of `api_key`
-(Anthropic), `openai_api_key`, or `gemini_api_key` and it auto-picks
-whichever is present. `model` overrides the per-provider default
-(`claude-opus-4-8` / `gpt-4o-mini` / `gemini-2.0-flash`). The same key
-powers grammar check and rewrite. Auth and request shape are handled per
-provider; a bad key or blocked request shows in the status bar.
+## Features in detail
 
-**Grammar check & rewrite** — Ctrl+G reviews the current file (or just
-the highlighted selection, if there is one) and shows a numbered issue
-report in a `GRAMMAR` overlay (hidden slot 12): each issue quotes the
-phrase, says what's wrong, and gives the fix. Ctrl+Shift+G instead returns
-the text rewritten with corrected grammar — voice and wording preserved —
-as copyable text in the same overlay. Either way your original is never
-modified; ESC returns to it, and each run replaces the previous result.
-Prompts can be overridden with `grammar_system` / `rewrite_system` in
-`claude.json`. Uses the same WiFi/API setup as Ask Claude; for files
-larger than 8 KB the loaded window is reviewed.
+### Per-file passwords (real encryption)
 
-Requires: `wifi.json` (the device's normal WiFi setup) and `claude.json`
-in the drive root (see `claude.json.example` for the multi-provider
-template). `claude.json` holds a real API key
-and is deliberately **not** in this repo (see `.gitignore`). Errors (no
-WiFi, bad key, refusal) show in the status bar and clear on the next
-keypress.
+`[P]` sets a password on the current file (`P` in file navigation works
+on the highlighted file without opening it). The file is re-written as
+**AES-256-CTR ciphertext** — plaintext never touches the disk again, so
+Drive Mode and sync only ever see unreadable bytes. Opening a protected
+file prompts for the password; wrong entries can be retried; ESC backs
+out. **Leaving a file to the menu re-locks it.** `[P]` on a protected
+file asks for the password and removes the protection (decrypts in
+place).
 
-Typing replaces the selection; Backspace/DEL delete it; plain movement
-drops it.
+> **A forgotten password means the file is permanently unrecoverable.**
+> There is no reset, no recovery, no backdoor. Test the flow on a
+> throwaway file first.
 
-## Rebuilding
+Design details for the curious: PBKDF2-HMAC-SHA256 key derivation
+(per-file random salt from the hardware RNG), a 56-byte header with a
+key verifier (so wrong passwords are rejected without touching
+content), and a position-keyed CTR keystream so the editor's windowed
+reads and in-place saves work directly on ciphertext. Keys live only in
+RAM, one file at a time, and are wiped on lock, file switch, and menu
+exit.
+
+Known tradeoffs: word counts for large (>8 KB) protected files only
+cover the loaded window; repeated synced snapshots of the same
+protected file share a keystream (remove and re-add the password to
+re-key if that matters to you); and clearing a file leaves the usual
+`*_backup.txt` on the drive — for a protected file that backup is still
+ciphertext.
+
+### Grammana Z (LLM assistant)
+
+`[G]` on the menu or Ctrl+Shift+C in the editor opens the assistant
+(status bar `GZ`). Type a question, press **Shift+Enter** to send — the
+request runs on the second core, so typing stays live. The answer is
+appended under a `---` separator; the whole file is the conversation
+(`---` separates turns), so follow-ups just work. Select-all + delete
+starts fresh; ESC returns to your writing.
+
+Works with **Anthropic, OpenAI, or Google Gemini** — see
+[claude.json](#claudejson).
+
+### Grammar check and rewrite
+
+**Ctrl+G** reviews the current file — or only the highlighted selection
+— and opens a numbered issue report (each issue quotes the phrase, says
+what's wrong, gives the fix). **Ctrl+Shift+G** instead returns the text
+rewritten with corrected grammar, voice preserved, as copyable text.
+Either way the original is never modified; ESC returns to it, and each
+run replaces the previous report. For files over 8 KB the loaded window
+is reviewed.
+
+### To-do scratchpad
+
+Ctrl+Shift+N from anywhere opens a plain-text scratchpad (status bar
+`TODO`); ESC saves and returns to the file you were in. It lives in
+hidden slot 10 (`10.txt` on the drive, included in sync).
+
+### Dark mode
+
+`[I]` toggles hardware panel inversion — white text on black,
+everything (selection, markdown styling, menu) included. Persists
+across reboots.
+
+## Configuration files
+
+All three live in the drive root (Drive Mode: `[U]` on the menu).
+
+### claude.json
+
+Required only for Grammana Z and grammar check. Start from
+`claude.json.example`:
+
+| Field | Meaning |
+|---|---|
+| `provider` | `anthropic`, `openai`, or `gemini`. Omit to auto-pick from whichever key is filled in. |
+| `api_key` | Anthropic API key (`anthropic_api_key` also accepted). |
+| `openai_api_key` / `gemini_api_key` | Keys for the other providers. |
+| `model` | Optional override. Defaults: `claude-opus-4-8` / `gpt-4o-mini` / `gemini-2.0-flash`. |
+| `max_tokens` | Response budget (default 1024). |
+| `system` | Assistant system prompt (the default keeps answers short and plain-text). |
+| `grammar_system` / `rewrite_system` | Optional prompt overrides for check/rewrite. |
+
+Errors (no WiFi, bad key, refusal) show in the status bar and clear on
+the next keypress.
+
+### wifi.json
+
+The device's normal WiFi setup — configure it on-device via `[W]`.
+Needed for sync and the LLM features. The radio is only powered during
+a request and switched off after.
+
+### keyboard.json
+
+A `/keyboard.json` on the drive replaces the compiled key layout
+entirely. The one in this repo matches the author's preferences
+(backtick next to A, extra Shift, `"` on the backslash key) **and
+contains the mod's key names** (`CTRL`, `GUI`, `SELECT_LEFT`,
+`WORD_RIGHT`, `DOC_END`, …). If you use your own layout, add those
+names or the new features silently go dead. Remove the file if
+reverting to stock firmware.
+
+## Security notes (read before sharing files or keys)
+
+- Your `claude.json` holds a real API key — it stays on the device and
+  is sent only as an auth header to the configured provider. It is
+  **git-ignored here and has never been committed**; keep it that way
+  if you fork this repo.
+- LLM requests go over HTTPS, but **without certificate pinning** (the
+  same approach the stock sync service uses). A network attacker who
+  can forge certificates could read the key and your text. Use trusted
+  networks, or don't configure the feature.
+- Grammana Z sends the **whole current file** (or selection, for
+  grammar) to your chosen provider. Don't use it inside files you
+  wouldn't share with that provider.
+- File encryption protects the content of protected files at rest —
+  including in Drive Mode, sync uploads, and backups — but file
+  **titles show `LOCKED`**, sizes remain visible, and the other nine
+  files are plain text.
+- PBKDF2 runs 6,000 iterations (an ESP32-class budget). A long
+  passphrase matters more than the iteration count.
+
+## Rebuilding from source
 
 ```sh
 git clone https://github.com/unkyulee/micro-journal
@@ -144,8 +233,8 @@ cd micro-journal-rev-4-esp32                             # Rev 8 shares this tre
 pio run -e rev_8
 ```
 
-Then merge the flashable image (app-only `firmware.bin` at 0x0 boot-loops —
-always merge):
+Then merge the flashable image (an app-only `firmware.bin` at 0x0
+boot-loops — always merge):
 
 ```sh
 cd .pio/build/rev_8
@@ -156,19 +245,26 @@ esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
   0x10000 firmware.bin
 ```
 
-## Flashing
-
-1. Upper USB-C port → PC, https://www.espboards.dev/tools/program/
-2. Connect → upload `firmware_rev_8.bin` → address **0x0** → Program (~1 min).
-3. Unlike official releases this image does not wipe the data partition;
-   journal files and `keyboard.json` survive.
-
 ## Implementation notes
 
-- Editor engine changes are shared by all Micro Journal revisions but gated
-  behind `Editor::selectionSupported`, which only the Rev 8 (RLCD) display
-  enables — other devices are unaffected (rev_4_68 and rev_6 build-verified).
-- New key codes are 2100–2119 in `src/service/Editor/Editor.h`.
-- A `/keyboard.json` on the device replaces the compiled key layers entirely;
-  it must use the new names (`CTRL`, `GUI`, `SELECT_LEFT`, `WORD_RIGHT`,
-  `DOC_END`, …) or the features silently go dead.
+- Editor engine changes are shared by all Micro Journal revisions but
+  gated behind `Editor::selectionSupported`, which only the Rev 8
+  (RLCD) display enables — other devices are unaffected (`rev_4_68`
+  and `rev_6` stay build-clean).
+- New key codes are 2100–2129 in `src/service/Editor/Editor.h`; the
+  encryption service is `src/service/Crypt/`, the LLM service
+  `src/service/AskClaude/`.
+- The menu and dialogs render in `profont22` — after hardware testing,
+  the only font family that stays readable on this panel (condensed
+  fonts pack letters together; thin-stroke fonts render ragged).
+- The undo engine and the encryption offset math were verified with
+  host-side AddressSanitizer harnesses built from the shipped code
+  (windowed reads at odd offsets, fast and splice save paths, 300
+  randomized edit cycles).
+
+## Credits and license
+
+Built on [Micro Journal](https://github.com/unkyulee/micro-journal) by
+**Un Kyu Lee**, licensed **CC BY-NC 4.0** — this mod inherits that
+license: share and adapt freely with attribution, no commercial use.
+The patch touches only the `micro-journal-rev-4-esp32` firmware tree.
