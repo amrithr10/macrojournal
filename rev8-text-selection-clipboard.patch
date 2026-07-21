@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..5981aec 100644
+index 966d565..76d2333 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,91 @@
@@ -93,7 +93,7 @@ index 966d565..5981aec 100644
 +
 +// First line of each file, shown as its title in the file list. Loaded
 +// when the home screen opens; 10 tiny reads are instant on the FAT.
-+static char file_titles[10][16];
++static char file_titles[10][14];
 +
 +static void home_load_titles()
 +{
@@ -185,7 +185,7 @@ index 966d565..5981aec 100644
  }
  
  //
-@@ -23,46 +122,88 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +122,86 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -193,50 +193,50 @@ index 966d565..5981aec 100644
 -    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
 -    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
 -        keyboard_layout = "US";
+-
+-    // Text to be displayed
+-    u8->setCursor(0, 40);
+-    u8->println();
+-    //
 +    // left command column, spaced at 23px so the lines get some air
 +    // (the default println leading reads squished on this panel)
 +    const char *rows[11];
 +    char darkRow[24], pwRow[24];
 +    int nrows = 0;
  
--    // Text to be displayed
--    u8->setCursor(0, 40);
--    u8->println();
--    //
--
 -    //
      if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 -    {
 -        u8->println(" [S] SYNC ");
 -    }
 +        rows[nrows++] = " [S] SYNC";
-+
-+    // Grammana Z (the LLM assistant) - only once claude.json is present
-+    if (gfs()->exists("/claude.json"))
-+        rows[nrows++] = " [G] GRAMMANA Z";
  
 -    u8->println(" [W] WIFI");
 -    u8->println(" [L] LANGUAGE");
 -    u8->println(" [T] BLE KEYBOARD");
 -    u8->println(" [U] DRIVE MODE");
++    // Grammana Z (the LLM assistant) - only once claude.json is present
++    if (gfs()->exists("/claude.json"))
++        rows[nrows++] = " [G] GRAMMANA";
+ 
+-    u8->println();
+-    u8->println(" [B] BACK ");
 +    rows[nrows++] = " [W] WIFI";
 +    rows[nrows++] = " [L] LANGUAGE";
-+    rows[nrows++] = " [T] BLE KEYBOARD";
-+    rows[nrows++] = " [U] DRIVE MODE";
-+    snprintf(darkRow, sizeof(darkRow), " [I] DARK MODE: %s",
++    rows[nrows++] = " [T] BLE KEYS";
++    rows[nrows++] = " [U] DRIVE";
++    snprintf(darkRow, sizeof(darkRow), " [I] DARK: %s",
 +             app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
 +    rows[nrows++] = darkRow;
-+    rows[nrows++] = " [F] SELECT FILE";
-+    snprintf(pwRow, sizeof(pwRow), " [P] PASSWORD: %s",
++    rows[nrows++] = " [F] FILES";
++    snprintf(pwRow, sizeof(pwRow), " [P] PASS: %s",
 +             crypt_is_encrypted(
 +                 format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
 +                 ? "ON"
 +                 : "OFF");
 +    rows[nrows++] = pwRow;
 +    rows[nrows++] = " [B] BACK";
- 
--    u8->println();
--    u8->println(" [B] BACK ");
++
 +    // as much leading as the row count allows: airy at 10 rows, and
 +    // still clear of the 300px panel edge when SYNC makes it 11
 +    int lead = (nrows >= 11) ? 24 : 26;
@@ -251,11 +251,12 @@ index 966d565..5981aec 100644
  
      // File Selection
 -    int pos_x = 190;
-+    int pos_x = 180;
-     u8->setCursor(pos_x, 45);
+-    u8->setCursor(pos_x, 45);
 -    u8->print("CHOOSE A FILE");
++    int pos_x = 180;
++    u8->setCursor(pos_x, 48);
 +    if (traverse >= 0)
-+        u8->print("ENTER OPEN D CLR P PWD");
++        u8->print("ENTER D P ESC");
 +    else
 +        u8->print("CHOOSE A FILE");
  
@@ -264,18 +265,18 @@ index 966d565..5981aec 100644
      {
 -        // word count
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
-+        int y = 72 + i * 22;
++        int y = 74 + i * 24;
 +        bool hi = (i == traverse);
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        char row[32];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
-+
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
 +        u8->setCursor(pos_x, y);
 +        u8->print(row);
 +
@@ -284,23 +285,23 @@ index 966d565..5981aec 100644
 +        // unreadable with this menu's opaque glyph rendering)
 +        if (hi)
 +        {
-+            display->drawLine(pos_x - 4, y - 15, 396, y - 15, 1);
-+            display->drawLine(pos_x - 4, y + 5, 396, y + 5, 1);
-+            display->drawLine(pos_x - 4, y - 15, pos_x - 4, y + 5, 1);
-+            display->drawLine(396, y - 15, 396, y + 5, 1);
-+            display->drawLine(pos_x - 5, y - 16, 397, y - 16, 1);
-+            display->drawLine(pos_x - 5, y + 6, 397, y + 6, 1);
-+            display->drawLine(pos_x - 5, y - 16, pos_x - 5, y + 6, 1);
-+            display->drawLine(397, y - 16, 397, y + 6, 1);
++            display->drawLine(pos_x - 4, y - 18, 396, y - 18, 1);
++            display->drawLine(pos_x - 4, y + 6, 396, y + 6, 1);
++            display->drawLine(pos_x - 4, y - 18, pos_x - 4, y + 6, 1);
++            display->drawLine(396, y - 18, 396, y + 6, 1);
++            display->drawLine(pos_x - 5, y - 19, 397, y - 19, 1);
++            display->drawLine(pos_x - 5, y + 7, 397, y + 7, 1);
++            display->drawLine(pos_x - 5, y - 19, pos_x - 5, y + 7, 1);
++            display->drawLine(397, y - 19, 397, y + 7, 1);
 +        }
      }
-     //
+-    //
 -    u8->setCursor(pos_x, 290);
-+    u8->setCursor(pos_x, 292);
-     u8->printf(" [D] Clear File # %d", file_index);
+-    u8->printf(" [D] Clear File # %d", file_index);
  }
  
-@@ -72,6 +213,92 @@ void Home_keyboard(char key)
+ //
+@@ -72,6 +210,92 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -393,7 +394,7 @@ index 966d565..5981aec 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +309,32 @@ void Home_keyboard(char key)
+@@ -82,9 +306,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -427,7 +428,7 @@ index 966d565..5981aec 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +371,9 @@ void Home_keyboard(char key)
+@@ -121,16 +368,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
@@ -450,7 +451,7 @@ index 966d565..5981aec 100644
 \ No newline at end of file
 +}
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-index 20809a1..c73eb57 100644
+index 20809a1..a8e0ce5 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 @@ -34,11 +34,16 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
@@ -475,22 +476,23 @@ index 20809a1..c73eb57 100644
  }
  
  void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -75,9 +80,11 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -75,10 +80,11 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          menu_clear = false;
      }
  
 -    // display tool bar
 -    u8->setFont(u8g2_font_profont17_tf);
 -    u8->setCursor(0, 5);
-+    // display tool bar - the whole menu uses the wider 10x20 font;
-+    // profont17 letters sit nearly touching on this panel and read as
-+    // one smudge
-+    u8->setFont(u8g2_font_10x20_tf);
-+    u8->setCursor(0, 1);
-     u8->println();
+-    u8->println();
++    // display tool bar - the whole menu uses profont22, the editor's
++    // default and the one font proven readable on this panel (profont17
++    // packs letters touching, 10x20's thin strokes render ragged)
++    u8->setFont(u8g2_font_profont22_tf);
++    u8->setCursor(0, 20);
      u8->print(" MENU ");
      u8->print(VERSION);
-@@ -128,7 +135,6 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+     display->drawLine(0, 25, 400, 25, 1);
+@@ -128,7 +134,6 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  
          Storage_render(display, u8);
      }
@@ -498,7 +500,7 @@ index 20809a1..c73eb57 100644
      // save prev state
      menu_state_prev = menu_state;
  }
-@@ -189,6 +195,7 @@ void Menu_keyboard(char key)
+@@ -189,6 +194,7 @@ void Menu_keyboard(char key)
          Storage_keyboard(key);
          return;
      }
@@ -507,7 +509,7 @@ index 20809a1..c73eb57 100644
  
  //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp
-index f160606..af01bcc 100644
+index f160606..d183f55 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp
 @@ -25,7 +25,7 @@ void Update_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
@@ -515,12 +517,12 @@ index f160606..af01bcc 100644
  void Update_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
 -    u8->setFont(u8g2_font_profont17_tf);
-+    u8->setFont(u8g2_font_10x20_tf);
++    u8->setFont(u8g2_font_profont22_tf);
      u8->setCursor(0, 30);
  
      //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..4916b5d 100644
+index bade544..13d620a 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -765,7 +767,7 @@ index bade544..4916b5d 100644
 +        return;
 +
 +    display->clearDisplay();
-+    u8->setFont(u8g2_font_10x20_tf);
++    u8->setFont(u8g2_font_profont22_tf);
 +    u8->setScale(1);
 +
 +    u8->setCursor(20, 60);
@@ -778,8 +780,8 @@ index bade544..4916b5d 100644
 +
 +    u8->setCursor(20, 110);
 +    u8->print("PASSWORD: ");
-+    // the wider font fits 26 stars; longer entries keep counting silently
-+    int shown = pw_len > 26 ? 26 : pw_len;
++    // the wider font fits 20 stars; longer entries keep counting silently
++    int shown = pw_len > 20 ? 20 : pw_len;
 +    for (int i = 0; i < shown; i++)
 +        u8->print("*");
 +    u8->setCursor(20, 150);
