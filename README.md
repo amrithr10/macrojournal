@@ -208,10 +208,15 @@ reverting to stock firmware.
   is sent only as an auth header to the configured provider. It is
   **git-ignored here and has never been committed**; keep it that way
   if you fork this repo.
-- LLM requests go over HTTPS, but **without certificate pinning** (the
-  same approach the stock sync service uses). A network attacker who
-  can forge certificates could read the key and your text. Use trusted
-  networks, or don't configure the feature.
+- All outbound HTTPS — LLM calls **and** Google Drive sync — verifies
+  the server's certificate against a bundled root CA trust store
+  (`src/service/Certs/Certs.h`), so a network attacker can't
+  impersonate the endpoint to capture the key or your text. (The stock
+  firmware skips this check; this mod adds it.) A wrong or man-in-the
+  middle certificate makes the request fail rather than leak. Because
+  certificate validation needs the real date, the device syncs its
+  clock over NTP the first time WiFi comes up each power cycle — a few
+  extra seconds on that first request.
 - Grammana Z sends the **whole current file** (or selection, for
   grammar) to your chosen provider. Don't use it inside files you
   wouldn't share with that provider.
@@ -253,7 +258,8 @@ esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
   and `rev_6` stay build-clean).
 - New key codes are 2100–2129 in `src/service/Editor/Editor.h`; the
   encryption service is `src/service/Crypt/`, the LLM service
-  `src/service/AskClaude/`.
+  `src/service/AskClaude/`, and the HTTPS root CA trust store
+  `src/service/Certs/`.
 - The menu and dialogs render in `profont22` — after hardware testing,
   the only font family that stays readable on this panel (condensed
   fonts pack letters together; thin-stroke fonts render ragged).
