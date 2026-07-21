@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..62a3ba9 100644
+index 966d565..908e3dd 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,135 @@
@@ -208,7 +208,7 @@ index 966d565..62a3ba9 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,54 +145,225 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,54 +145,270 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -262,7 +262,7 @@ index 966d565..62a3ba9 100644
 +
 +static const int DIV_X = 184;   // column divider
 +static const int FILE_X = 188;  // file text left edge
-+static const int LIST_Y0 = 74;  // first file row
++static const int LIST_Y0 = 78;  // first file row (gap under header)
 +static const int LIST_LEAD = 22;
 +
 +// draw one file-pane row, inverting it when highlighted
@@ -339,7 +339,7 @@ index 966d565..62a3ba9 100644
 -    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 +        for (int i = 0; i < nrows; i++)
 +        {
-+            u8->setCursor(2, 74 + i * 26);
++            u8->setCursor(2, 78 + i * 26);
 +            u8->print(rows[i]);
 +        }
 +    }
@@ -358,7 +358,7 @@ index 966d565..62a3ba9 100644
 +        int gap = (nc >= 10) ? 0 : 8;
 +        for (int i = 0; i < nc; i++)
 +        {
-+            int y = 74 + i * lead + (i == nc - 1 ? gap : 0);
++            int y = 78 + i * lead + (i == nc - 1 ? gap : 0);
 +            if (i == menu_sel)
 +            {
 +                display->drawFilledRectangle(0, y - 19, DIV_X - 2, y + 6, 1);
@@ -391,16 +391,19 @@ index 966d565..62a3ba9 100644
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+        int y = LIST_Y0 + v * LIST_LEAD;
++        // the notes sit a few px lower so the tools/notes separator has
++        // clear air on both sides
++        int extra = (e >= 3) ? 4 : 0;
++        int y = LIST_Y0 + v * LIST_LEAD + extra;
 +        char row[24];
 +        if (e == 0)
-+            snprintf(row, sizeof(row), "%cSCRATCHPAD",
++            snprintf(row, sizeof(row), "%c[S] SCRATCHPAD",
 +                     file_index == 10 ? '>' : ' ');
 +        else if (e == 1)
-+            snprintf(row, sizeof(row), "%cGRAMMANA Z",
++            snprintf(row, sizeof(row), "%c[G] GRAMMANA Z",
 +                     file_index == 11 ? '>' : ' ');
 +        else if (e == 2)
-+            snprintf(row, sizeof(row), " LAST NOTE %d",
++            snprintf(row, sizeof(row), " [/] LAST NOTE %d",
 +                     app["config"]["last_note"].as<int>());
 +        else
 +        {
@@ -418,17 +421,14 @@ index 966d565..62a3ba9 100644
  
 -    int file_index = app["config"]["file_index"].as<int>();
 -    for (int i = 0; i < 10; i++)
-+        // thin separator just below LAST NOTE, dividing tools from notes,
-+        // whenever that boundary is on screen
++        // separator centered in the enlarged gap below LAST NOTE
 +        if (e == 2)
-+            display->drawLine(FILE_X - 6, y + 8, 397, y + 8, 1);
++            display->drawLine(FILE_X - 5, y + 6, 397, y + 6, 1);
 +    }
 +
 +    // down chevron when entries remain below the window
 +    if (list_scroll + LIST_VIS < TRAV_COUNT)
-     {
--        // word count
--        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
++    {
 +        int ax = (FILE_X + 397) / 2;
 +        int ay = 291;
 +        display->drawLine(ax - 8, ay, ax, ay + 6, 1);
@@ -437,9 +437,7 @@ index 966d565..62a3ba9 100644
 +        display->drawLine(ax + 8, ay + 1, ax, ay + 7, 1);
 +    }
 +}
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +// open the highlighted traverse item (pin or note)
 +static void home_open(int sel)
 +{
@@ -454,28 +452,79 @@ index 966d565..62a3ba9 100644
 +        WP_openFileGuarded(app["config"]["last_note"].as<int>());
 +    }
 +    else
-+    {
+     {
+-        // word count
+-        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        app["screen"] = WORDPROCESSOR;
 +        WP_openFileGuarded(trav_note(sel));
++    }
++}
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
++// Run a command by its key. Used both by a direct hotkey press and by
++// Enter on the highlighted command row. (Kept separate from the S/G/'/'
++// file launchers so those keys open their files on a direct press while
++// Enter on the SYNC row still reaches sync.)
++static void home_activate_command(char key)
++{
++    JsonDocument &app = status();
++    if (key == 'F')
++    {
++        traverse = trav_for_file(app["config"]["file_index"].as<int>());
++        ensure_entry_visible(traverse);
++        traverse_stick = true;
      }
 -    //
 -    u8->setCursor(pos_x, 290);
 -    u8->printf(" [D] Clear File # %d", file_index);
++    else if (key == 'N')
++    {
++        naming = true;
++        name_len = 0;
++        name_buf[0] = '\0';
++    }
++    else if (key == 'S')
++    {
++        if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
++            app["menu"]["state"] = MENU_SYNC;
++    }
++    else if (key == 'I')
++    {
++        bool dark = !app["config"]["darkmode"].as<bool>();
++        app["config"]["darkmode"] = dark;
++        config_save();
++        display_RLCD_dark(dark);
++    }
++    else if (key == 'B')
++        app["screen"] = WORDPROCESSOR;
++    else if (key == 'W')
++        app["menu"]["state"] = MENU_WIFI;
++    else if (key == 'L')
++        app["menu"]["state"] = MENU_LAYOUT;
++    else if (key == 'T')
++        app["screen"] = KEYBOARDSCREEN;
++    else if (key == 'U')
++        app["menu"]["state"] = MENU_STORAGE;
  }
  
  //
-@@ -72,65 +372,218 @@ void Home_keyboard(char key)
+@@ -72,65 +417,194 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
 -    // home
+-    if (key == 'S' || key == 's')
 +    // DEVICE RENAME MODE - typing goes into the header bar
 +    if (naming)
-+    {
+     {
+-        if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 +        if (key == 27)
-+        {
+         {
+-            // to sync
+-            app["menu"]["state"] = MENU_SYNC;
 +            naming = false;
-+        }
+         }
 +        else if (key == '\n')
 +        {
 +            if (name_len > 0)
@@ -499,18 +548,25 @@ index 966d565..62a3ba9 100644
 +            name_buf[name_len] = '\0';
 +        }
 +        return;
-+    }
+     }
+-
+-    else if (key == 'D' || key == 'd')
 +    if (key == 'n' || key == 'N')
-+    {
+     {
+-        // to clear file
+-        app["menu"]["state"] = MENU_CLEAR;
 +        naming = true;
 +        name_len = 0;
 +        name_buf[0] = '\0';
 +        return;
-+    }
-+
+     }
+ 
+-    else if (key == '\b' || key == 'B' || key == 'b')
 +    // FILE TRAVERSE MODE toggle
 +    if (key == 'f' || key == 'F')
-+    {
+     {
+-        // go back to the word processor
+-        app["screen"] = WORDPROCESSOR;
 +        if (traverse < 0)
 +        {
 +            traverse = trav_for_file(app["config"]["file_index"].as<int>());
@@ -523,11 +579,14 @@ index 966d565..62a3ba9 100644
 +            traverse_stick = false;
 +        }
 +        return;
-+    }
-+
+     }
+ 
+-    else if (key == 'w')
 +    // FILE TRAVERSE MODE (right pane active)
 +    if (traverse >= 0)
-+    {
+     {
+-        // move to keyboard layout
+-        app["menu"]["state"] = MENU_WIFI;
 +        if (key == 20 || key == 18)
 +        {
 +            traverse = (traverse + TRAV_COUNT - 1) % TRAV_COUNT;
@@ -600,12 +659,15 @@ index 966d565..62a3ba9 100644
 +            traverse = -1;
 +        else
 +            return; // everything else is ignored while traversing
-+    }
-+
+     }
+ 
+-    else if (key == 'l')
 +    // COMMAND MENU (left pane active): arrows move the highlight,
 +    // Enter activates it (same as pressing its hotkey)
 +    if (traverse < 0)
-+    {
+     {
+-        // move to keyboard layout
+-        app["menu"]["state"] = MENU_LAYOUT;
 +        Cmd cmds[12];
 +        int nc = build_commands(app, cmds);
 +        if (menu_sel >= nc)
@@ -625,71 +687,35 @@ index 966d565..62a3ba9 100644
 +        }
 +        if (key == '\n')
 +        {
-+            Home_keyboard(cmds[menu_sel].key); // dispatch as its hotkey
++            home_activate_command(cmds[menu_sel].key);
 +            return;
 +        }
-+    }
-+
-+    // home command hotkeys
-     if (key == 'S' || key == 's')
-     {
-         if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
--        {
--            // to sync
-             app["menu"]["state"] = MENU_SYNC;
--        }
-     }
- 
--    else if (key == 'D' || key == 'd')
-+    else if (key == 'G' || key == 'g')
-     {
--        // to clear file
--        app["menu"]["state"] = MENU_CLEAR;
-+        // Grammana Z is in the file list, but the key still opens it
-+        if (gfs()->exists("/grammana_z.json"))
-+            WP_requestAskClaude();
-+    }
-+
-+    else if (key == 'I' || key == 'i')
-+    {
-+        bool dark = !app["config"]["darkmode"].as<bool>();
-+        app["config"]["darkmode"] = dark;
-+        config_save();
-+        display_RLCD_dark(dark);
-     }
- 
-     else if (key == '\b' || key == 'B' || key == 'b')
-     {
--        // go back to the word processor
-         app["screen"] = WORDPROCESSOR;
-     }
- 
--    else if (key == 'w')
-+    else if (key == 'W' || key == 'w')
-     {
--        // move to keyboard layout
-         app["menu"]["state"] = MENU_WIFI;
-     }
- 
--    else if (key == 'l')
-+    else if (key == 'L' || key == 'l')
-     {
--        // move to keyboard layout
-         app["menu"]["state"] = MENU_LAYOUT;
      }
  
 -    else if (key == 't')
-+    else if (key == 'T' || key == 't')
++    // FILE LAUNCHERS - direct keys shown in brackets in the file list
++    if (key == 'S' || key == 's')
      {
 -        // move to keyboard layout
-         app["screen"] = KEYBOARDSCREEN;
+-        app["screen"] = KEYBOARDSCREEN;
++        WP_requestScratchpad();
++        return;
      }
- 
+-
 -    else if (key == 'u')
-+    else if (key == 'U' || key == 'u')
++    if (key == 'G' || key == 'g')
      {
 -        // move to keyboard layout
-         app["menu"]["state"] = MENU_STORAGE;
+-        app["menu"]["state"] = MENU_STORAGE;
++        if (gfs()->exists("/grammana_z.json"))
++            WP_requestAskClaude();
++        return;
++    }
++    if (key == '/')
++    {
++        app["screen"] = WORDPROCESSOR;
++        WP_openFileGuarded(app["config"]["last_note"].as<int>());
++        return;
      }
  
 -    // chose file
@@ -708,9 +734,13 @@ index 966d565..62a3ba9 100644
 -        // go back to the word processor
          app["screen"] = WORDPROCESSOR;
 +        WP_openFileGuarded(key - 48);
++        return;
      }
 -}
 \ No newline at end of file
++
++    // remaining command hotkeys (B/W/L/T/U/I; F and N handled above)
++    home_activate_command(key >= 'a' && key <= 'z' ? key - 32 : key);
 +}
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
 index af10c48..6e29955 100644

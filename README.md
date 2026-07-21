@@ -44,13 +44,14 @@ sub-screen (WiFi, Language, Sync, …) returns to this main menu.
   DRIVE, FILES, LANGUAGE, SYNC (shown once sync is configured), WIFI,
   and BACK. One is always highlighted; arrows move it and Enter runs it,
   or just press the bracketed key.
-- **CHOOSE A FILE** — one scrolling list: SCRATCHPAD, GRAMMANA Z, and
-  LAST NOTE (jumps to the note you edited most recently) as the first
-  three entries, a separator line, then the ten notes 0–9. A
-  down-chevron shows when more sits below. Each note row is its first
-  line as a title (markdown markers stripped) and `>` marks the open
-  file/tool; protected notes show `LOCKED`. Titles refresh every time
-  the menu opens. Press `0-9` to open a note directly.
+- **CHOOSE A FILE** — one scrolling list: `[S]` SCRATCHPAD, `[G]`
+  GRAMMANA Z, and `[/]` LAST NOTE (jumps to the note you edited most
+  recently) as the first three entries, a separator line, then the ten
+  notes `[0]`–`[9]`. Press the bracketed key to open any of them
+  directly (S / G / / / 0–9), or navigate with `F`. A down-chevron
+  shows when more sits below; `>` marks the open file/tool; protected
+  notes show `LOCKED`. Titles (each note's first line, markers
+  stripped) refresh every time the menu opens.
 
 **File navigation (`F`)** — press `F` and a row highlights in inverse
 video; the left pane switches from the command list to the actions for
