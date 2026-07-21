@@ -48,7 +48,9 @@ default and the one font that reads cleanly on this panel (profont17
 packs letters nearly touching). Command labels are shortened to fit
 the wider glyphs (same keys: `[G] GRAMMANA`, `[T] BLE KEYS`,
 `[U] DRIVE`, `[I] DARK`, `[F] FILES`, `[P] PASS`); titles cap at 13
-characters and the traverse hint reads `ENTER D P ESC`.
+characters and the traverse hint reads `ENTER D P ESC`. A vertical
+divider separates the command column from the file list, with a rule
+under the file header.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (a 2px frame around the row); arrows move the highlight (wrapping), Enter

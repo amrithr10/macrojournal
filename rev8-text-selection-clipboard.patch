@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..76d2333 100644
+index 966d565..50ceaa2 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,91 @@
@@ -185,7 +185,7 @@ index 966d565..76d2333 100644
  }
  
  //
-@@ -23,47 +122,86 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +122,92 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -206,21 +206,12 @@ index 966d565..76d2333 100644
  
 -    //
      if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
--    {
--        u8->println(" [S] SYNC ");
--    }
 +        rows[nrows++] = " [S] SYNC";
- 
--    u8->println(" [W] WIFI");
--    u8->println(" [L] LANGUAGE");
--    u8->println(" [T] BLE KEYBOARD");
--    u8->println(" [U] DRIVE MODE");
++
 +    // Grammana Z (the LLM assistant) - only once claude.json is present
 +    if (gfs()->exists("/claude.json"))
 +        rows[nrows++] = " [G] GRAMMANA";
- 
--    u8->println();
--    u8->println(" [B] BACK ");
++
 +    rows[nrows++] = " [W] WIFI";
 +    rows[nrows++] = " [L] LANGUAGE";
 +    rows[nrows++] = " [T] BLE KEYS";
@@ -242,18 +233,32 @@ index 966d565..76d2333 100644
 +    int lead = (nrows >= 11) ? 24 : 26;
 +    int gap = (nrows >= 11) ? 0 : 8;
 +    for (int i = 0; i < nrows; i++)
-+    {
+     {
+-        u8->println(" [S] SYNC ");
 +        // the BACK entry sits apart from the rest
 +        int y = 48 + i * lead + (i == nrows - 1 ? gap : 0);
 +        u8->setCursor(0, y);
 +        u8->print(rows[i]);
-+    }
+     }
  
-     // File Selection
+-    u8->println(" [W] WIFI");
+-    u8->println(" [L] LANGUAGE");
+-    u8->println(" [T] BLE KEYBOARD");
+-    u8->println(" [U] DRIVE MODE");
++    // File Selection
++    int pos_x = 180;
+ 
+-    u8->println();
+-    u8->println(" [B] BACK ");
++    // visual separation: a vertical divider between the command column
++    // and the file list, and a rule under the file header
++    display->drawLine(172, 25, 172, 299, 1);
++    display->drawLine(pos_x - 2, 55, 396, 55, 1);
+ 
+-    // File Selection
 -    int pos_x = 190;
 -    u8->setCursor(pos_x, 45);
 -    u8->print("CHOOSE A FILE");
-+    int pos_x = 180;
 +    u8->setCursor(pos_x, 48);
 +    if (traverse >= 0)
 +        u8->print("ENTER D P ESC");
@@ -301,7 +306,7 @@ index 966d565..76d2333 100644
  }
  
  //
-@@ -72,6 +210,92 @@ void Home_keyboard(char key)
+@@ -72,6 +216,92 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -394,7 +399,7 @@ index 966d565..76d2333 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +306,32 @@ void Home_keyboard(char key)
+@@ -82,9 +312,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -428,7 +433,7 @@ index 966d565..76d2333 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +368,9 @@ void Home_keyboard(char key)
+@@ -121,16 +374,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
