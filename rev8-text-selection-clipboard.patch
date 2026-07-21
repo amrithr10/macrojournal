@@ -69,10 +69,10 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..302bdfc 100644
+index 966d565..de2c5b1 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -6,6 +6,122 @@
+@@ -6,6 +6,135 @@
  
  //
  #include "service/Editor/Editor.h"
@@ -80,31 +80,32 @@ index 966d565..302bdfc 100644
 +#include "../../display_RLCD.h"
 +#include "service/Crypt/Crypt.h"
 +
-+// The file pane lists the two built-in tools (Scratchpad = slot 10,
-+// Grammana Z = slot 11) pinned at the top, then the ten notes (0-9)
-+// below in a scrolling window.
++// The file pane pins three quick entries at the top - Scratchpad (slot
++// 10), Grammana Z (slot 11) and Last Note (the most recent note you
++// edited) - then lists notes 0-9 in a scrolling window below.
 +//
-+// Traverse mode ([F]) walks a single 12-item list:
-+//   0 = Scratchpad, 1 = Grammana Z, 2..11 = notes 0..9
-+// The two tools stay put; only the notes scroll, keeping the highlight
-+// in view. Enter opens the item; D/P act on notes only.
-+#define TRAV_COUNT 12
++// Traverse mode ([F]) walks one list:
++//   0 = Scratchpad, 1 = Grammana Z, 2 = Last Note, 3..12 = notes 0..9
++// The three pins stay put; only the notes scroll. Enter opens the item;
++// D/P act on real notes only.
++#define TRAV_COUNT 13
 +#define NOTE_VIS 8 // notes visible at once (10 total -> 2 can scroll)
 +
-+static bool trav_is_tool(int t) { return t == 0 || t == 1; }
-+static int trav_note(int t) { return t - 2; } // valid when t >= 2
++static bool trav_is_pin(int t) { return t <= 2; }
++static int trav_note(int t) { return t - 3; } // valid when t >= 3
 +
-+// -1 = traverse off, else the highlighted position 0..11. Sticky: acting
-+// on a file (or visiting one) and returning restores the highlight; only
-+// ESC or F turn it off.
++// -1 = traverse off, else the highlighted position 0..12. Sticky.
 +static int traverse = -1;
 +static bool traverse_stick = false;
 +
 +// first visible note in the scrolling window (0..2)
 +static int note_scroll = 0;
 +
-+// First line of each note, shown as its title. Loaded when the home
-+// screen opens; 10 tiny reads are instant on the FAT.
++// Highlighted command in the left menu (arrow navigation). Sticky across
++// menu visits; clamped to the live command count.
++static int menu_sel = 0;
++
++// First line of each note, shown as its title.
 +static char file_titles[10][13];
 +
 +// [N]: rename the device - the toolbar title, typed into the header bar
@@ -124,6 +125,18 @@ index 966d565..302bdfc 100644
 +        note_scroll = 0;
 +    if (note_scroll > 10 - NOTE_VIS)
 +        note_scroll = 10 - NOTE_VIS;
++}
++
++// traverse position for a given active file index
++static int trav_for_file(int fi)
++{
++    if (fi == 10)
++        return 0;
++    if (fi == 11)
++        return 1;
++    if (fi >= 0 && fi <= 9)
++        return fi + 3;
++    return 3; // first note
 +}
 +
 +static void home_load_titles()
@@ -195,7 +208,7 @@ index 966d565..302bdfc 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,54 +132,193 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,54 +145,222 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -209,34 +222,55 @@ index 966d565..302bdfc 100644
 +    // in traverse mode when they left the menu
 +    if (traverse_stick)
 +    {
-+        int fi = app["config"]["file_index"].as<int>();
-+        if (fi == 10)
-+            traverse = 0; // scratchpad
-+        else if (fi == 11)
-+            traverse = 1; // grammana z
-+        else if (fi >= 0 && fi <= 9)
-+            traverse = fi + 2; // a note
-+        else
-+            traverse = 0;
-+
-+        if (traverse >= 2)
++        traverse = trav_for_file(app["config"]["file_index"].as<int>());
++        if (traverse >= 3)
 +            ensure_note_visible(trav_note(traverse));
 +    }
 +    else
 +        traverse = -1;
 +}
 +
-+// layout of the file pane
++// ---- command menu -------------------------------------------------------
++
++struct Cmd
++{
++    char label[16];
++    char key;
++};
++
++// Build the command list in display order (alphabetical, BACK last).
++static int build_commands(JsonDocument &app, Cmd *c)
++{
++    int n = 0;
++    strcpy(c[n].label, "[T] BLE KEYS"); c[n++].key = 'T';
++    snprintf(c[n].label, sizeof(c[n].label), "[I] DARK: %s",
++             app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
++    c[n++].key = 'I';
++    strcpy(c[n].label, "[N] DEVICE NAME"); c[n++].key = 'N';
++    strcpy(c[n].label, "[U] DRIVE"); c[n++].key = 'U';
++    strcpy(c[n].label, "[F] FILES"); c[n++].key = 'F';
++    strcpy(c[n].label, "[L] LANGUAGE"); c[n++].key = 'L';
++    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
++    {
++        strcpy(c[n].label, "[S] SYNC"); c[n++].key = 'S';
++    }
++    strcpy(c[n].label, "[W] WIFI"); c[n++].key = 'W';
++    strcpy(c[n].label, "[B] BACK"); c[n++].key = 'B';
++    return n;
++}
++
++// ---- file pane layout ---------------------------------------------------
++
 +static const int DIV_X = 184;   // column divider
 +static const int FILE_X = 188;  // file text left edge
-+static const int TOOL1_Y = 76;  // Scratchpad row
-+static const int TOOL2_Y = 98;  // Grammana Z row
-+static const int NOTE_Y0 = 126; // first note row
-+static const int NOTE_LEAD = 21;
++static const int TOOL_Y[3] = {74, 92, 110};
++static const int SEP_Y = 119;
++static const int NOTE_Y0 = 134;
++static const int NOTE_LEAD = 20;
 +
 +// draw one file-pane row, inverting it when highlighted
-+static void draw_row(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8,
-+                     int y, const char *text, bool hi)
++static void draw_frow(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8,
++                      int y, const char *text, bool hi)
 +{
 +    if (hi)
 +    {
@@ -265,142 +299,145 @@ index 966d565..302bdfc 100644
 -    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
 -    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
 -        keyboard_layout = "US";
-+    // The left pane is contextual. In file-traverse mode ([F]) it lists
-+    // the actions for the highlighted item (the command keys are inert
-+    // while traversing, so showing them would only mislead). Otherwise it
-+    // is the command column, alphabetical, BACK set apart at the bottom.
-+    const char *rows[12];
-+    char darkRow[24];
-+    int nrows = 0;
-+    const char *leftHeader;
- 
--    // Text to be displayed
--    u8->setCursor(0, 40);
--    u8->println();
--    //
-+    if (traverse >= 0)
-+    {
-+        leftHeader = "ACTIONS";
-+        rows[nrows++] = "ARROWS  MOVE";
-+        rows[nrows++] = "[ENTER] OPEN";
-+        if (!trav_is_tool(traverse)) // D/P apply to notes only
-+        {
-+            rows[nrows++] = "[D] CLEAR";
-+            rows[nrows++] = "[P] PASSWORD";
-+        }
-+        rows[nrows++] = "[F] EXIT";
-+    }
-+    else
-+    {
-+        leftHeader = "MENU";
- 
--    //
--    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
-+        rows[nrows++] = "[T] BLE KEYS";
-+        snprintf(darkRow, sizeof(darkRow), "[I] DARK: %s",
-+                 app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
-+        rows[nrows++] = darkRow;
-+        rows[nrows++] = "[N] DEVICE NAME";
-+        rows[nrows++] = "[U] DRIVE";
-+        rows[nrows++] = "[F] FILES";
-+        rows[nrows++] = "[L] LANGUAGE";
-+
-+        if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
-+            rows[nrows++] = "[S] SYNC";
-+
-+        rows[nrows++] = "[W] WIFI";
-+        rows[nrows++] = "[B] BACK";
-+    }
-+
 +    // divider + matching inverted header bars over both panes
 +    display->drawLine(DIV_X, 25, DIV_X, 299, 1);
-+
 +    display->drawFilledRectangle(0, 29, DIV_X - 2, 55, 1);
 +    display->drawFilledRectangle(DIV_X + 2, 29, 397, 55, 1);
 +    u8->setForegroundColor(0);
 +    u8->setBackgroundColor(1);
 +    u8->setCursor(2, 48);
-+    u8->print(leftHeader);
++    u8->print(traverse >= 0 ? "ACTIONS" : "MENU");
 +    u8->setCursor(FILE_X, 48);
 +    if (naming)
-     {
--        u8->println(" [S] SYNC ");
++    {
 +        u8->print("NAME: ");
 +        u8->print(name_buf);
 +        u8->print("_");
-     }
++    }
 +    else
 +        u8->print("CHOOSE A FILE");
 +    u8->setForegroundColor(1);
 +    u8->setBackgroundColor(0);
  
+-    // Text to be displayed
+-    u8->setCursor(0, 40);
+-    u8->println();
+-    //
++    // LEFT PANE
++    if (traverse >= 0)
++    {
++        // file-traverse actions for the highlighted item
++        const char *rows[6];
++        int nrows = 0;
++        rows[nrows++] = "ARROWS  MOVE";
++        rows[nrows++] = "[ENTER] OPEN";
++        if (!trav_is_pin(traverse)) // D/P apply to real notes only
++        {
++            rows[nrows++] = "[D] CLEAR";
++            rows[nrows++] = "[P] PASSWORD";
++        }
++        rows[nrows++] = "[F] EXIT";
+ 
+-    //
+-    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
++        for (int i = 0; i < nrows; i++)
++        {
++            u8->setCursor(2, 74 + i * 26);
++            u8->print(rows[i]);
++        }
++    }
++    else
+     {
+-        u8->println(" [S] SYNC ");
++        // command column, arrow-navigable (menu_sel highlighted)
++        Cmd cmds[12];
++        int nc = build_commands(app, cmds);
++        if (menu_sel >= nc)
++            menu_sel = nc - 1;
++        if (menu_sel < 0)
++            menu_sel = 0;
++
++        int lead = (nc >= 11) ? 22 : (nc >= 10) ? 24 : 26;
++        int gap = (nc >= 10) ? 0 : 8;
++        for (int i = 0; i < nc; i++)
++        {
++            int y = 74 + i * lead + (i == nc - 1 ? gap : 0);
++            if (i == menu_sel)
++            {
++                display->drawFilledRectangle(0, y - 19, DIV_X - 2, y + 6, 1);
++                u8->setForegroundColor(0);
++                u8->setBackgroundColor(1);
++                u8->setCursor(2, y);
++                u8->print(cmds[i].label);
++                u8->setForegroundColor(1);
++                u8->setBackgroundColor(0);
++            }
++            else
++            {
++                u8->setCursor(2, y);
++                u8->print(cmds[i].label);
++            }
++        }
+     }
+ 
 -    u8->println(" [W] WIFI");
 -    u8->println(" [L] LANGUAGE");
 -    u8->println(" [T] BLE KEYBOARD");
 -    u8->println(" [U] DRIVE MODE");
-+    // command rows start level with the file rows
-+    int lead = (nrows >= 11) ? 22 : (nrows >= 10) ? 24 : 26;
-+    int gap = (nrows >= 10) ? 0 : 8;
-+    for (int i = 0; i < nrows; i++)
-+    {
-+        int y = 74 + i * lead + (i == nrows - 1 ? gap : 0);
-+        u8->setCursor(2, y);
-+        u8->print(rows[i]);
-+    }
++    // RIGHT PANE - three pinned entries
++    char pin[20];
++    snprintf(pin, sizeof(pin), "%cSCRATCHPAD", file_index == 10 ? '>' : ' ');
++    draw_frow(display, u8, TOOL_Y[0], pin, traverse == 0);
++    snprintf(pin, sizeof(pin), "%cGRAMMANA Z", file_index == 11 ? '>' : ' ');
++    draw_frow(display, u8, TOOL_Y[1], pin, traverse == 1);
++    snprintf(pin, sizeof(pin), " LAST NOTE %d",
++             app["config"]["last_note"].as<int>());
++    draw_frow(display, u8, TOOL_Y[2], pin, traverse == 2);
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+    // pinned tools
-+    char toolRow[20];
-+    snprintf(toolRow, sizeof(toolRow), "%cSCRATCHPAD",
-+             file_index == 10 ? '>' : ' ');
-+    draw_row(display, u8, TOOL1_Y, toolRow, traverse == 0);
-+    snprintf(toolRow, sizeof(toolRow), "%cGRAMMANA Z",
-+             file_index == 11 ? '>' : ' ');
-+    draw_row(display, u8, TOOL2_Y, toolRow, traverse == 1);
++    // separator between the pins and the scrolling notes
++    display->drawLine(FILE_X - 6, SEP_Y, 397, SEP_Y, 1);
  
 -    // File Selection
 -    int pos_x = 190;
 -    u8->setCursor(pos_x, 45);
 -    u8->print("CHOOSE A FILE");
-+    // separator between the tools and the scrolling notes
-+    display->drawLine(FILE_X - 6, 108, 397, 108, 1);
- 
--    int file_index = app["config"]["file_index"].as<int>();
--    for (int i = 0; i < 10; i++)
 +    // notes window
 +    for (int v = 0; v < NOTE_VIS; v++)
-     {
--        // word count
--        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
++    {
 +        int note = note_scroll + v;
 +        if (note >= 10)
 +            break;
  
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
+-    int file_index = app["config"]["file_index"].as<int>();
+-    for (int i = 0; i < 10; i++)
 +        int y = NOTE_Y0 + v * NOTE_LEAD;
 +        char row[24];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 note == file_index ? '>' : ' ', note,
 +                 file_titles[note][0] ? file_titles[note] : "-");
 +
-+        draw_row(display, u8, y, row, traverse == note + 2);
++        draw_frow(display, u8, y, row, traverse == note + 3);
 +    }
 +
 +    // down chevron when notes remain below the window
 +    if (note_scroll + NOTE_VIS < 10)
-+    {
+     {
+-        // word count
+-        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int ax = (FILE_X + 397) / 2;
-+        int ay = 288;
++        int ay = 289;
 +        display->drawLine(ax - 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax + 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax - 8, ay + 1, ax, ay + 7, 1);
 +        display->drawLine(ax + 8, ay + 1, ax, ay + 7, 1);
 +    }
 +}
-+
-+// open the highlighted traverse item (tool or note)
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
++// open the highlighted traverse item (pin or note)
 +static void home_open(int sel)
 +{
 +    JsonDocument &app = status();
@@ -408,6 +445,11 @@ index 966d565..302bdfc 100644
 +        WP_requestScratchpad(); // sets the screen itself
 +    else if (sel == 1)
 +        WP_requestAskClaude();
++    else if (sel == 2)
++    {
++        app["screen"] = WORDPROCESSOR;
++        WP_openFileGuarded(app["config"]["last_note"].as<int>());
++    }
 +    else
 +    {
 +        app["screen"] = WORDPROCESSOR;
@@ -419,7 +461,7 @@ index 966d565..302bdfc 100644
  }
  
  //
-@@ -72,20 +327,170 @@ void Home_keyboard(char key)
+@@ -72,65 +369,221 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -463,16 +505,13 @@ index 966d565..302bdfc 100644
 +        return;
 +    }
 +
-+    // FILE TRAVERSE MODE
++    // FILE TRAVERSE MODE toggle
 +    if (key == 'f' || key == 'F')
 +    {
 +        if (traverse < 0)
 +        {
-+            int fi = app["config"]["file_index"].as<int>();
-+            traverse = (fi == 10) ? 0 : (fi == 11) ? 1
-+                     : (fi >= 0 && fi <= 9) ? fi + 2
-+                                            : 2;
-+            if (traverse >= 2)
++            traverse = trav_for_file(app["config"]["file_index"].as<int>());
++            if (traverse >= 3)
 +                ensure_note_visible(trav_note(traverse));
 +            traverse_stick = true;
 +        }
@@ -483,25 +522,25 @@ index 966d565..302bdfc 100644
 +        }
 +        return;
 +    }
++
++    // FILE TRAVERSE MODE (right pane active)
 +    if (traverse >= 0)
 +    {
-+        // arrows move the highlight over the 12-item list (with wrap)
 +        if (key == 20 || key == 18)
 +        {
 +            traverse = (traverse + TRAV_COUNT - 1) % TRAV_COUNT;
-+            if (traverse >= 2)
++            if (traverse >= 3)
 +                ensure_note_visible(trav_note(traverse));
 +            return;
 +        }
 +        if (key == 21 || key == 19)
 +        {
 +            traverse = (traverse + 1) % TRAV_COUNT;
-+            if (traverse >= 2)
++            if (traverse >= 3)
 +                ensure_note_visible(trav_note(traverse));
 +            return;
 +        }
 +
-+        // Enter: open the highlighted item (password gate applies)
 +        if (key == '\n')
 +        {
 +            int sel = traverse;
@@ -510,12 +549,10 @@ index 966d565..302bdfc 100644
 +            return;
 +        }
 +
-+        // D: clear the highlighted note (tools can't be cleared). A
-+        // locked note asks for its password first, then continues to the
-+        // clear confirmation; afterwards we land back on the menu.
++        // D: clear the highlighted note (pins can't be cleared)
 +        if (key == 'd' || key == 'D')
 +        {
-+            if (trav_is_tool(traverse))
++            if (trav_is_pin(traverse))
 +                return;
 +
 +            int note = trav_note(traverse);
@@ -540,10 +577,10 @@ index 966d565..302bdfc 100644
 +            return;
 +        }
 +
-+        // P: set/remove the highlighted note's password (tools excluded)
++        // P: set/remove the highlighted note's password (pins excluded)
 +        if (key == 'p' || key == 'P')
 +        {
-+            if (trav_is_tool(traverse))
++            if (trav_is_pin(traverse))
 +                return;
 +            int note = trav_note(traverse);
 +            traverse = -1;
@@ -551,7 +588,6 @@ index 966d565..302bdfc 100644
 +            return;
 +        }
 +
-+        // ESC leaves traverse mode
 +        if (key == 27)
 +        {
 +            traverse = -1;
@@ -559,14 +595,42 @@ index 966d565..302bdfc 100644
 +            return;
 +        }
 +
-+        // digits fall through to the normal open-by-number handler
++        // digits fall through to the open-by-number handler
 +        if (key >= '0' && key <= '9')
 +            traverse = -1;
 +        else
 +            return; // everything else is ignored while traversing
 +    }
 +
-+    // home commands
++    // COMMAND MENU (left pane active): arrows move the highlight,
++    // Enter activates it (same as pressing its hotkey)
++    if (traverse < 0)
++    {
++        Cmd cmds[12];
++        int nc = build_commands(app, cmds);
++        if (menu_sel >= nc)
++            menu_sel = nc - 1;
++        if (menu_sel < 0)
++            menu_sel = 0;
++
++        if (key == 20 || key == 18)
++        {
++            menu_sel = (menu_sel + nc - 1) % nc;
++            return;
++        }
++        if (key == 21 || key == 19)
++        {
++            menu_sel = (menu_sel + 1) % nc;
++            return;
++        }
++        if (key == '\n')
++        {
++            Home_keyboard(cmds[menu_sel].key); // dispatch as its hotkey
++            return;
++        }
++    }
++
++    // home command hotkeys
      if (key == 'S' || key == 's')
      {
          if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
@@ -578,18 +642,16 @@ index 966d565..302bdfc 100644
  
 -    else if (key == 'D' || key == 'd')
 +    else if (key == 'G' || key == 'g')
-+    {
-+        // Grammana Z lives in the file list now, but the key still opens
-+        // it for quick access from the home screen
+     {
+-        // to clear file
+-        app["menu"]["state"] = MENU_CLEAR;
++        // Grammana Z is in the file list, but the key still opens it
 +        if (gfs()->exists("/grammana_z.json"))
 +            WP_requestAskClaude();
 +    }
 +
 +    else if (key == 'I' || key == 'i')
-     {
--        // to clear file
--        app["menu"]["state"] = MENU_CLEAR;
-+        // toggle dark mode (hardware panel inversion), persisted in config
++    {
 +        bool dark = !app["config"]["darkmode"].as<bool>();
 +        app["config"]["darkmode"] = dark;
 +        config_save();
@@ -597,7 +659,8 @@ index 966d565..302bdfc 100644
      }
  
      else if (key == '\b' || key == 'B' || key == 'b')
-@@ -94,43 +499,32 @@ void Home_keyboard(char key)
+     {
+-        // go back to the word processor
          app["screen"] = WORDPROCESSOR;
      }
  
@@ -643,16 +706,31 @@ index 966d565..302bdfc 100644
 -
 -        //
 -        // go back to the word processor
-+        // guarded: a protected file prompts for its password (the prompt
-+        // lives on the word processor screen)
          app["screen"] = WORDPROCESSOR;
 +        WP_openFileGuarded(key - 48);
      }
 -}
 \ No newline at end of file
 +}
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
+index af10c48..6e29955 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
+@@ -95,10 +95,8 @@ void Layout_keyboard(char key)
+         app["config"]["font"] = 0;
+     }
+ 
+-    // Save configuration and update the screen
++    // Save configuration and go back to the main menu (not out to the
++    // note - the user is still in the menu changing settings)
+     config_save();
+-    app["screen"] = WORDPROCESSOR;
+-
+-    // Go back to the home menu
+     app["menu"]["state"] = MENU_HOME;
+ }
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-index 20809a1..5cc69d8 100644
+index 20809a1..bd04918 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 @@ -34,11 +34,16 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
@@ -709,7 +787,26 @@ index 20809a1..5cc69d8 100644
      // save prev state
      menu_state_prev = menu_state;
  }
-@@ -189,6 +198,7 @@ void Menu_keyboard(char key)
+@@ -149,6 +158,18 @@ void Menu_keyboard(char key)
+ 
+     // based on the current menu state
+     int menu_state = app["menu"]["state"].as<int>();
++
++    // ESC from any sub-screen (WiFi, Language, Sync, ...) returns to the
++    // main menu, not out to the note. Storage runs its own eject/reboot
++    // on ESC, and Home handles its own ESC (traverse / rename), so both
++    // are left to their handlers.
++    if ((key == 27 || key == MENU) &&
++        menu_state != MENU_HOME && menu_state != MENU_STORAGE)
++    {
++        app["menu"]["state"] = MENU_HOME;
++        return;
++    }
++
+     if (menu_state == MENU_HOME)
+     {
+         Home_keyboard(key);
+@@ -189,6 +210,7 @@ void Menu_keyboard(char key)
          Storage_keyboard(key);
          return;
      }
@@ -717,6 +814,19 @@ index 20809a1..5cc69d8 100644
  }
  
  //
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
+index c7b8a61..2d68f2e 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
+@@ -85,6 +85,7 @@ void Sync_keyboard(char key)
+     int sync_state = app["sync_state"].as<int>();
+     if (sync_state == SYNC_COMPLETED || sync_state == SYNC_ERROR)
+     {
+-        app["screen"] = WORDPROCESSOR;
++        // return to the main menu rather than out to the note
++        app["menu"]["state"] = MENU_HOME;
+     }
+ }
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp
 index f160606..d183f55 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Update/Update.cpp
@@ -731,7 +841,7 @@ index f160606..d183f55 100644
  
      //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..cc294b1 100644
+index bade544..a5c41c7 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -743,7 +853,7 @@ index bade544..cc294b1 100644
  
  //
  int STATUSBAR_Y = 295;
-@@ -44,6 +46,182 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
+@@ -44,6 +46,185 @@ static const int WP_FONT_COUNT = sizeof(WP_FONTS) / sizeof(WP_FONTS[0]);
  // active font, selected in WP_setup from config "font"
  static EditorFont *wp_font = &WP_FONTS[0];
  
@@ -867,6 +977,9 @@ index bade544..cc294b1 100644
 +{
 +    JsonDocument &app = status();
 +    app["config"]["file_index"] = fileIndex;
++    // remember the most recent real note (0-9) for the home LAST NOTE pin
++    if (fileIndex >= 0 && fileIndex <= 9)
++        app["config"]["last_note"] = fileIndex;
 +    config_save();
 +    Editor::getInstance().loadFile(format("/%d.txt", fileIndex));
 +    app["screen"] = WORDPROCESSOR;
@@ -926,7 +1039,7 @@ index bade544..cc294b1 100644
  // layout derived from the active font metrics in WP_setup
  static int editY = 264;   // baseline of the edit line
  static int cursorY = 270; // top of the cursor band under the edit line
-@@ -91,9 +269,24 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -91,9 +272,24 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // editor instantiate
      Editor::getInstance().init(cols, rows, wp_font);
  
@@ -954,7 +1067,7 @@ index bade544..cc294b1 100644
  
      // start from clear background
      clear_background = true;
-@@ -104,9 +297,72 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -104,9 +300,72 @@ void WP_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      last_sleep = millis();
  }
  
@@ -1027,7 +1140,7 @@ index bade544..cc294b1 100644
      // the editor swapped to a different window of the file (paging, or the
      // buffer filling up while typing) - force a full redraw
      if (Editor::getInstance().pageChanged)
-@@ -119,6 +375,40 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -119,6 +378,40 @@ void WP_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // timers
      WP_check_saved();
  
@@ -1068,7 +1181,7 @@ index bade544..cc294b1 100644
      // CLEAR BACKGROUND
      WP_render_clear(display, u8);
  
-@@ -161,6 +451,8 @@ bool WP_contentChanged()
+@@ -161,6 +454,8 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
@@ -1077,7 +1190,7 @@ index bade544..cc294b1 100644
  
      JsonDocument &app = status();
  
-@@ -170,6 +462,7 @@ bool WP_contentChanged()
+@@ -170,6 +465,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -1085,7 +1198,7 @@ index bade544..cc294b1 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,7 +473,9 @@ bool WP_contentChanged()
+@@ -180,7 +476,9 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
@@ -1096,7 +1209,7 @@ index bade544..cc294b1 100644
  
      cursorPos_prev = cursorPos;
      cursorLinePos_prev = cursorLinePos;
-@@ -188,7 +483,9 @@ bool WP_contentChanged()
+@@ -188,7 +486,9 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
@@ -1106,7 +1219,7 @@ index bade544..cc294b1 100644
  
      return changed;
  }
-@@ -244,6 +541,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +544,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -1121,7 +1234,7 @@ index bade544..cc294b1 100644
      //
      JsonDocument &app = status();
  
-@@ -304,20 +609,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -304,20 +612,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  }
  
  //
@@ -1297,7 +1410,7 @@ index bade544..cc294b1 100644
      }
  }
  
-@@ -382,11 +834,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +837,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -1319,7 +1432,7 @@ index bade544..cc294b1 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +863,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +866,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -1328,7 +1441,7 @@ index bade544..cc294b1 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +875,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +878,14 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
@@ -1343,7 +1456,7 @@ index bade544..cc294b1 100644
  }
  
  //
-@@ -478,6 +946,82 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +949,82 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -1426,7 +1539,7 @@ index bade544..cc294b1 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +1030,115 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +1033,115 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -1547,7 +1660,7 @@ index bade544..cc294b1 100644
          }
      }
  
-@@ -505,15 +1150,12 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,15 +1153,12 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  

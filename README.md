@@ -35,13 +35,18 @@ browser-based step and does not erase your journal files.
 ## The menu
 
 The menu (toolbar title: **RighterDeck** — rename it with `[N]`) is two
-panels under matching inverted headers, split by a divider:
+panels under matching inverted headers, split by a divider. Arrow keys
+navigate the highlighted pane and Enter activates the highlight;
+letter/number hotkeys still work directly at any time. ESC from any
+sub-screen (WiFi, Language, Sync, …) returns to this main menu.
 
 - **MENU** — the commands, alphabetical: BLE KEYS, DARK, DEVICE NAME,
   DRIVE, FILES, LANGUAGE, SYNC (shown once sync is configured), WIFI,
-  and BACK. Press the bracketed key.
-- **CHOOSE A FILE** — the two built-in tools (SCRATCHPAD, GRAMMANA Z)
-  pinned at the top, then the ten notes 0–9 in a scrolling window (a
+  and BACK. One is always highlighted; arrows move it and Enter runs it,
+  or just press the bracketed key.
+- **CHOOSE A FILE** — three quick pins at the top — SCRATCHPAD,
+  GRAMMANA Z, and LAST NOTE (jumps to the note you edited most
+  recently) — then the ten notes 0–9 in a scrolling window (a
   down-chevron shows when more notes sit below). Each note row is its
   first line as a title (markdown markers stripped) and `>` marks the
   open file/tool; protected notes show `LOCKED`. Titles refresh every
@@ -49,13 +54,13 @@ panels under matching inverted headers, split by a divider:
 
 **File navigation (`F`)** — press `F` and a row highlights in inverse
 video; the left pane switches from the command list to the actions for
-that row. Arrows move the highlight through all twelve entries
-(Scratchpad, Grammana Z, then notes 0–9), wrapping at the ends, and the
-notes scroll to keep the highlight in view while the two tools stay
-pinned. **Enter** opens the highlighted item. For notes only, **D**
-clears it (password-verified for locked notes, straight into the usual
-confirmation, then back to the menu) and **P** opens its password flow —
-the tools show just OPEN. The command keys are inactive while
+that row. Arrows move the highlight through all thirteen entries
+(Scratchpad, Grammana Z, Last Note, then notes 0–9), wrapping at the
+ends, and the notes scroll to keep the highlight in view while the three
+pins stay put. **Enter** opens the highlighted item. For notes only,
+**D** clears it (password-verified for locked notes, straight into the
+usual confirmation, then back to the menu) and **P** opens its password
+flow — the pins show just OPEN. The command keys are inactive while
 traversing; `F` or ESC exits. The highlight is sticky: open something
 and come back, and it's still where you left it.
 
