@@ -48,12 +48,14 @@ panels under matching inverted headers, split by a divider:
   open a file directly.
 
 **File navigation (`F`)** — press `F` and a file row highlights in
-inverse video; arrows move it (wrapping), and actions target the
-highlighted file: **Enter** opens it, **D** clears it (password-verified
+inverse video; the left pane switches from the command list to the file
+actions for that row. Arrows move the highlight (wrapping), and the
+actions target it: **Enter** opens it, **D** clears it (password-verified
 for locked files, straight into the usual confirmation, and back to the
-menu afterwards), **P** opens its password flow. The highlight is sticky
-— open a file and come back, and it's still where you left it. ESC or
-`F` exits.
+menu afterwards), **P** opens its password flow. The command keys (`S`,
+`G`, `W`, …) are inactive while traversing — `F` or ESC exits back to
+the command pane. The highlight is sticky: open a file and come back,
+and it's still where you left it.
 
 **Rename the device (`N`)** — the toolbar title (default **RighterDeck**)
 is yours to change: press `[N]` on the menu, type a new name into the

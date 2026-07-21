@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..a8ad3f5 100644
+index 966d565..7dafa8c 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,96 @@
@@ -190,7 +190,7 @@ index 966d565..a8ad3f5 100644
  }
  
  //
-@@ -23,47 +127,108 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +127,125 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -198,51 +198,69 @@ index 966d565..a8ad3f5 100644
 -    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
 -    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
 -        keyboard_layout = "US";
-+    // left command column, alphabetical; BACK sits apart at the bottom
-+    const char *rows[12];
-+    char darkRow[24], pwRow[24];
-+    int nrows = 0;
- 
+-
 -    // Text to be displayed
 -    u8->setCursor(0, 40);
 -    u8->println();
 -    //
-+    rows[nrows++] = "[T] BLE KEYS";
-+    snprintf(darkRow, sizeof(darkRow), "[I] DARK: %s",
-+             app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
-+    rows[nrows++] = darkRow;
-+    rows[nrows++] = "[U] DRIVE";
-+    rows[nrows++] = "[F] FILES";
++    // The left pane is contextual. In file-traverse mode ([F]) it lists
++    // the actions that apply to the highlighted file - the command keys
++    // do nothing while traversing, so showing them would only mislead.
++    // Out of traverse mode it's the command column (alphabetical, BACK
++    // set apart at the bottom).
++    const char *rows[12];
++    char darkRow[24], pwRow[24];
++    int nrows = 0;
++    const char *leftHeader;
  
 -    //
 -    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
--    {
++    if (traverse >= 0)
+     {
 -        u8->println(" [S] SYNC ");
--    }
-+    // Grammana Z (the LLM assistant) - only once grammana_z.json is present
-+    if (gfs()->exists("/grammana_z.json"))
-+        rows[nrows++] = "[G] GRAMMANA Z";
++        leftHeader = "ACTIONS";
++        rows[nrows++] = "ARROWS  MOVE";
++        rows[nrows++] = "[ENTER] OPEN";
++        rows[nrows++] = "[D] CLEAR";
++        rows[nrows++] = "[P] PASSWORD";
++        rows[nrows++] = "[F] EXIT";
+     }
++    else
++    {
++        leftHeader = "MENU";
++
++        rows[nrows++] = "[T] BLE KEYS";
++        snprintf(darkRow, sizeof(darkRow), "[I] DARK: %s",
++                 app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
++        rows[nrows++] = darkRow;
++        rows[nrows++] = "[U] DRIVE";
++        rows[nrows++] = "[F] FILES";
  
 -    u8->println(" [W] WIFI");
 -    u8->println(" [L] LANGUAGE");
 -    u8->println(" [T] BLE KEYBOARD");
 -    u8->println(" [U] DRIVE MODE");
-+    rows[nrows++] = "[L] LANGUAGE";
-+    rows[nrows++] = "[N] NAME";
-+    snprintf(pwRow, sizeof(pwRow), "[P] PWD: %s",
-+             crypt_is_encrypted(
-+                 format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
-+                 ? "ON"
-+                 : "OFF");
-+    rows[nrows++] = pwRow;
++        // Grammana Z (the LLM assistant) - only once grammana_z.json is present
++        if (gfs()->exists("/grammana_z.json"))
++            rows[nrows++] = "[G] GRAMMANA Z";
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
-+        rows[nrows++] = "[S] SYNC";
++        rows[nrows++] = "[L] LANGUAGE";
++        rows[nrows++] = "[N] NAME";
++        snprintf(pwRow, sizeof(pwRow), "[P] PWD: %s",
++                 crypt_is_encrypted(
++                     format("/%d.txt", app["config"]["file_index"].as<int>()).c_str())
++                     ? "ON"
++                     : "OFF");
++        rows[nrows++] = pwRow;
 +
-+    rows[nrows++] = "[W] WIFI";
-+    rows[nrows++] = "[B] BACK";
++        if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
++            rows[nrows++] = "[S] SYNC";
++
++        rows[nrows++] = "[W] WIFI";
++        rows[nrows++] = "[B] BACK";
++    }
  
      // File Selection
 -    int pos_x = 190;
@@ -259,7 +277,7 @@ index 966d565..a8ad3f5 100644
 +    u8->setForegroundColor(0);
 +    u8->setBackgroundColor(1);
 +    u8->setCursor(4, 48);
-+    u8->print("MENU");
++    u8->print(leftHeader);
 +    u8->setCursor(pos_x, 48);
 +    if (naming)
 +    {
@@ -267,8 +285,6 @@ index 966d565..a8ad3f5 100644
 +        u8->print(name_buf);
 +        u8->print("_");
 +    }
-+    else if (traverse >= 0)
-+        u8->print("ENTER D P ESC");
 +    else
 +        u8->print("CHOOSE A FILE");
 +    u8->setForegroundColor(1);
@@ -293,16 +309,16 @@ index 966d565..a8ad3f5 100644
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int y = 74 + i * 24;
 +        bool hi = (i == traverse);
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        char row[32];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
-+
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
 +        // traverse highlight: inverse video - a filled bar with the row
 +        // printed white-on-black over it (the bar must be drawn first;
 +        // an opaque glyph reprint over an existing row paints patchy)
@@ -328,7 +344,7 @@ index 966d565..a8ad3f5 100644
  }
  
  //
-@@ -72,6 +237,131 @@ void Home_keyboard(char key)
+@@ -72,6 +254,131 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -460,7 +476,7 @@ index 966d565..a8ad3f5 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +372,32 @@ void Home_keyboard(char key)
+@@ -82,9 +389,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -494,7 +510,7 @@ index 966d565..a8ad3f5 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +434,9 @@ void Home_keyboard(char key)
+@@ -121,16 +451,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
