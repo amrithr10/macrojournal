@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..908e3dd 100644
+index 966d565..9eeb3fb 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,135 @@
@@ -80,16 +80,16 @@ index 966d565..908e3dd 100644
 +#include "../../display_RLCD.h"
 +#include "service/Crypt/Crypt.h"
 +
-+// The file pane pins three quick entries at the top - Scratchpad (slot
-+// 10), Grammana Z (slot 11) and Last Note (the most recent note you
-+// edited) - then lists notes 0-9 in a scrolling window below.
++// The file pane is one scrolling list: three quick entries first -
++// Scratchpad (slot 10), Grammana Z (slot 11) and Last Note (the most
++// recent note edited) - a separator, then notes 0-9.
 +//
-+// Traverse mode ([F]) walks one list:
++// Traverse mode ([F]) walks the whole list:
 +//   0 = Scratchpad, 1 = Grammana Z, 2 = Last Note, 3..12 = notes 0..9
-+// The three pins stay put; only the notes scroll. Enter opens the item;
-+// D/P act on real notes only.
++// The list scrolls to keep the highlight in view. Enter opens the item;
++// D/P act on real notes only (positions 0-2 are open-only).
 +#define TRAV_COUNT 13
-+#define LIST_VIS 10 // file rows visible at once (13 total -> 3 scroll)
++#define LIST_VIS 8 // file rows visible at once (13 total -> 5 scroll)
 +
 +static bool trav_is_pin(int t) { return t <= 2; }
 +static int trav_note(int t) { return t - 3; } // valid when t >= 3
@@ -208,7 +208,7 @@ index 966d565..908e3dd 100644
  
  //
  void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -16,54 +145,270 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -16,54 +145,267 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      //
      JsonDocument &app = status();
      app["menu"]["state"] = MENU_HOME;
@@ -240,19 +240,20 @@ index 966d565..908e3dd 100644
 +// Build the command list in display order (alphabetical, BACK last).
 +static int build_commands(JsonDocument &app, Cmd *c)
 +{
++    // sorted by the bracket key (BACK kept last as the exit). Files
++    // moved next to the file header, so [F] is no longer listed here.
 +    int n = 0;
-+    strcpy(c[n].label, "[T] BLE KEYS"); c[n++].key = 'T';
 +    snprintf(c[n].label, sizeof(c[n].label), "[I] DARK: %s",
 +             app["config"]["darkmode"].as<bool>() ? "ON" : "OFF");
 +    c[n++].key = 'I';
-+    strcpy(c[n].label, "[N] DEVICE NAME"); c[n++].key = 'N';
-+    strcpy(c[n].label, "[U] DRIVE"); c[n++].key = 'U';
-+    strcpy(c[n].label, "[F] FILES"); c[n++].key = 'F';
 +    strcpy(c[n].label, "[L] LANGUAGE"); c[n++].key = 'L';
++    strcpy(c[n].label, "[N] DEVICE NAME"); c[n++].key = 'N';
 +    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 +    {
 +        strcpy(c[n].label, "[S] SYNC"); c[n++].key = 'S';
 +    }
++    strcpy(c[n].label, "[T] BLE KEYS"); c[n++].key = 'T';
++    strcpy(c[n].label, "[U] DRIVE"); c[n++].key = 'U';
 +    strcpy(c[n].label, "[W] WIFI"); c[n++].key = 'W';
 +    strcpy(c[n].label, "[B] BACK"); c[n++].key = 'B';
 +    return n;
@@ -262,8 +263,8 @@ index 966d565..908e3dd 100644
 +
 +static const int DIV_X = 184;   // column divider
 +static const int FILE_X = 188;  // file text left edge
-+static const int LIST_Y0 = 78;  // first file row (gap under header)
-+static const int LIST_LEAD = 22;
++static const int LIST_Y0 = 80;  // first row: leaves a gap under header
++static const int LIST_LEAD = 26; // matches the roomy left-menu pitch
 +
 +// draw one file-pane row, inverting it when highlighted
 +static void draw_frow(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8,
@@ -271,7 +272,7 @@ index 966d565..908e3dd 100644
 +{
 +    if (hi)
 +    {
-+        display->drawFilledRectangle(FILE_X - 5, y - 19, 397, y + 7, 1);
++        display->drawFilledRectangle(DIV_X + 2, y - 19, 397, y + 6, 1);
 +        u8->setForegroundColor(0);
 +        u8->setBackgroundColor(1);
 +        u8->setCursor(FILE_X, y);
@@ -312,7 +313,7 @@ index 966d565..908e3dd 100644
 +        u8->print("_");
 +    }
 +    else
-+        u8->print("CHOOSE A FILE");
++        u8->print("CHOOSE A FILE [F]");
 +    u8->setForegroundColor(1);
 +    u8->setBackgroundColor(0);
  
@@ -339,7 +340,7 @@ index 966d565..908e3dd 100644
 -    if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
 +        for (int i = 0; i < nrows; i++)
 +        {
-+            u8->setCursor(2, 78 + i * 26);
++            u8->setCursor(2, 80 + i * 26);
 +            u8->print(rows[i]);
 +        }
 +    }
@@ -358,7 +359,7 @@ index 966d565..908e3dd 100644
 +        int gap = (nc >= 10) ? 0 : 8;
 +        for (int i = 0; i < nc; i++)
 +        {
-+            int y = 78 + i * lead + (i == nc - 1 ? gap : 0);
++            int y = 80 + i * lead + (i == nc - 1 ? gap : 0);
 +            if (i == menu_sel)
 +            {
 +                display->drawFilledRectangle(0, y - 19, DIV_X - 2, y + 6, 1);
@@ -391,19 +392,14 @@ index 966d565..908e3dd 100644
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+        // the notes sit a few px lower so the tools/notes separator has
-+        // clear air on both sides
-+        int extra = (e >= 3) ? 4 : 0;
-+        int y = LIST_Y0 + v * LIST_LEAD + extra;
++        int y = LIST_Y0 + v * LIST_LEAD;
 +        char row[24];
 +        if (e == 0)
-+            snprintf(row, sizeof(row), "%c[S] SCRATCHPAD",
-+                     file_index == 10 ? '>' : ' ');
++            snprintf(row, sizeof(row), "[S] SCRATCHPAD");
 +        else if (e == 1)
-+            snprintf(row, sizeof(row), "%c[G] GRAMMANA Z",
-+                     file_index == 11 ? '>' : ' ');
++            snprintf(row, sizeof(row), "[G] GRAMMANA Z");
 +        else if (e == 2)
-+            snprintf(row, sizeof(row), " [/] LAST NOTE %d",
++            snprintf(row, sizeof(row), "[/] LAST NOTE [%d]",
 +                     app["config"]["last_note"].as<int>());
 +        else
 +        {
@@ -421,16 +417,17 @@ index 966d565..908e3dd 100644
  
 -    int file_index = app["config"]["file_index"].as<int>();
 -    for (int i = 0; i < 10; i++)
-+        // separator centered in the enlarged gap below LAST NOTE
++        // separator centered in the row gap below LAST NOTE, clear of
++        // the vertical divider
 +        if (e == 2)
-+            display->drawLine(FILE_X - 5, y + 6, 397, y + 6, 1);
++            display->drawLine(DIV_X + 2, y + 8, 397, y + 8, 1);
 +    }
 +
 +    // down chevron when entries remain below the window
 +    if (list_scroll + LIST_VIS < TRAV_COUNT)
 +    {
 +        int ax = (FILE_X + 397) / 2;
-+        int ay = 291;
++        int ay = 282;
 +        display->drawLine(ax - 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax + 8, ay, ax, ay + 6, 1);
 +        display->drawLine(ax - 8, ay + 1, ax, ay + 7, 1);
@@ -509,7 +506,7 @@ index 966d565..908e3dd 100644
  }
  
  //
-@@ -72,65 +417,194 @@ void Home_keyboard(char key)
+@@ -72,65 +414,194 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -871,7 +868,7 @@ index f160606..d183f55 100644
  
      //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..a5c41c7 100644
+index bade544..b27b1a4 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -1569,7 +1566,7 @@ index bade544..a5c41c7 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +1033,115 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +1033,139 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -1610,14 +1607,38 @@ index bade544..a5c41c7 100644
 +        }
 +    }
 +
-+    // Ctrl+Shift+N: open the to-do scratchpad
++    // Ctrl+Shift+S: with a selection, append it to the scratchpad without
++    // leaving the current note; with no selection, open the scratchpad.
 +    else if (key == KEY_SCRATCHPAD)
 +    {
 +        // act on press: releasing the modifiers first must not matter
 +        if (pressed && app["config"]["file_index"].as<int>() != SCRATCH_FILE_INDEX)
 +        {
-+            _log("Scratchpad opened\n");
-+            WP_openOverlay(SCRATCH_FILE_INDEX);
++            Editor &ed = Editor::getInstance();
++            if (ed.hasSelection())
++            {
++                // send the selection to the scratchpad file (slot 10),
++                // each send on its own line; the note is untouched
++                int start = ed.selectionStart();
++                int len = ed.selectionEnd() - start;
++                File f = gfs()->open(format("/%d.txt", SCRATCH_FILE_INDEX).c_str(),
++                                     FILE_APPEND);
++                if (f)
++                {
++                    f.write((const uint8_t *)(ed.buffer + start), len);
++                    f.write((const uint8_t *)"\n", 1);
++                    f.close();
++                }
++                // clearing the selection is the (silent) confirmation
++                ed.clearSelection();
++                ed.updateScreen();
++                _log("Selection sent to scratchpad (%d bytes)\n", len);
++            }
++            else
++            {
++                _log("Scratchpad opened\n");
++                WP_openOverlay(SCRATCH_FILE_INDEX);
++            }
 +        }
 +    }
 +
@@ -1690,7 +1711,7 @@ index bade544..a5c41c7 100644
          }
      }
  
-@@ -505,15 +1153,12 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,15 +1177,12 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  

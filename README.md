@@ -40,15 +40,18 @@ navigate the highlighted pane and Enter activates the highlight;
 letter/number hotkeys still work directly at any time. ESC from any
 sub-screen (WiFi, Language, Sync, …) returns to this main menu.
 
-- **MENU** — the commands, alphabetical: BLE KEYS, DARK, DEVICE NAME,
-  DRIVE, FILES, LANGUAGE, SYNC (shown once sync is configured), WIFI,
-  and BACK. One is always highlighted; arrows move it and Enter runs it,
-  or just press the bracketed key.
+- **MENU** — the commands, ordered by their bracket key: DARK,
+  LANGUAGE, DEVICE NAME, SYNC (shown once sync is configured), BLE KEYS,
+  DRIVE, WIFI, then BACK (kept last as the exit). One is always
+  highlighted; arrows move it and Enter runs it, or just press the
+  bracketed key. `[F]` (open the file list / traverse) lives next to the
+  CHOOSE A FILE header rather than in this column.
 - **CHOOSE A FILE** — one scrolling list: `[S]` SCRATCHPAD, `[G]`
   GRAMMANA Z, and `[/]` LAST NOTE (jumps to the note you edited most
   recently) as the first three entries, a separator line, then the ten
-  notes `[0]`–`[9]`. Press the bracketed key to open any of them
-  directly (S / G / / / 0–9), or navigate with `F`. A down-chevron
+  notes `[0]`–`[9]` (the LAST NOTE row shows the note number in
+  brackets too). Press the bracketed key to open any of them directly
+  (S / G / `/` / 0–9), or press `F` (shown by the header) to navigate. A down-chevron
   shows when more sits below; `>` marks the open file/tool; protected
   notes show `LOCKED`. Titles (each note's first line, markers
   stripped) refresh every time the menu opens.
@@ -91,7 +94,7 @@ interchangeable in every shortcut below.
 | Delete word left | Ctrl + Backspace |
 | Undo / redo | Ctrl + Z / Y |
 | Bold / italic markers | Ctrl + B / I |
-| Scratchpad | Ctrl+Shift + S |
+| Scratchpad — open, or send selection to it | Ctrl+Shift + S |
 | Grammana Z assistant | Ctrl+Shift + C |
 | Grammar check | Ctrl + G |
 | Grammar rewrite | Ctrl+Shift + G |
@@ -169,10 +172,17 @@ is reviewed.
 
 ### Scratchpad
 
-Ctrl+Shift+S from anywhere (or the SCRATCHPAD row in the file list)
-opens a plain-text scratchpad (status bar `SCRATCHPAD`); ESC saves and
-returns to the file you were in. It lives in slot 10 (`10.txt` on the
-drive, included in sync).
+Ctrl+Shift+S (or the `[S]` SCRATCHPAD row in the file list) opens a
+plain-text scratchpad (status bar `SCRATCHPAD`); ESC saves and returns
+to the file you were in. It lives in slot 10 (`10.txt` on the drive,
+included in sync).
+
+**Send selection to scratchpad** — if you have text highlighted in a
+note, Ctrl+Shift+S instead appends that selection to the scratchpad (on
+its own line) *without leaving the note* — a quick way to stash a
+snippet while writing. The note is untouched; the selection clears as
+confirmation. (Sending from an encrypted note writes that snippet to the
+scratchpad in plain text, since the scratchpad isn't encrypted.)
 
 ### Dark mode
 
