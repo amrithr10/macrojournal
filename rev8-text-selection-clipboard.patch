@@ -465,7 +465,7 @@ index 966d565..a4f0373 100644
 \ No newline at end of file
 +}
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-index 20809a1..a8e0ce5 100644
+index 20809a1..5ee7353 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 @@ -34,11 +34,16 @@ void Menu_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
@@ -490,7 +490,7 @@ index 20809a1..a8e0ce5 100644
  }
  
  void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
-@@ -75,10 +80,11 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -75,12 +80,13 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          menu_clear = false;
      }
  
@@ -498,14 +498,18 @@ index 20809a1..a8e0ce5 100644
 -    u8->setFont(u8g2_font_profont17_tf);
 -    u8->setCursor(0, 5);
 -    u8->println();
+-    u8->print(" MENU ");
+-    u8->print(VERSION);
 +    // display tool bar - the whole menu uses profont22, the editor's
 +    // default and the one font proven readable on this panel (profont17
 +    // packs letters touching, 10x20's thin strokes render ragged)
++    // centered header ("RightWrite" is 10 chars of the 12px font)
 +    u8->setFont(u8g2_font_profont22_tf);
-+    u8->setCursor(0, 20);
-     u8->print(" MENU ");
-     u8->print(VERSION);
++    u8->setCursor((400 - 10 * 12) / 2, 20);
++    u8->print("RightWrite");
      display->drawLine(0, 25, 400, 25, 1);
+ 
+     // draw sub module of menu
 @@ -128,7 +134,6 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  
          Storage_render(display, u8);

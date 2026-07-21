@@ -50,7 +50,8 @@ the wider glyphs (same keys: `[G] GRAMMANA`, `[T] BLE KEYS`,
 `[U] DRIVE`, `[I] DARK`, `[F] FILES`, `[P] PASS`); titles cap at 13
 characters and the traverse hint reads `ENTER D P ESC`. A vertical
 divider separates the command column from the file list, and both
-panels carry matching inverted header bars (`MENU` / `CHOOSE A FILE`).
+panels carry matching inverted header bars (`MENU` / `CHOOSE A FILE`)
+under a centered `RightWrite` toolbar title.
 
 **File traverse mode** — `[F]` on the home screen highlights a file in
 the list (inverse video: white text on a filled bar); arrows move the highlight (wrapping), Enter
