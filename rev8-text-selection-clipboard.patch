@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..17e0b24 100644
+index 966d565..a4f0373 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,91 @@
@@ -185,7 +185,7 @@ index 966d565..17e0b24 100644
  }
  
  //
-@@ -23,47 +122,93 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -23,47 +122,100 @@ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  {
      JsonDocument &app = status();
  
@@ -193,25 +193,34 @@ index 966d565..17e0b24 100644
 -    String keyboard_layout = app["config"]["keyboard_layout"].as<String>();
 -    if (keyboard_layout == "null" || keyboard_layout.isEmpty())
 -        keyboard_layout = "US";
--
--    // Text to be displayed
--    u8->setCursor(0, 40);
--    u8->println();
--    //
 +    // left command column, spaced at 23px so the lines get some air
 +    // (the default println leading reads squished on this panel)
 +    const char *rows[11];
 +    char darkRow[24], pwRow[24];
 +    int nrows = 0;
  
+-    // Text to be displayed
+-    u8->setCursor(0, 40);
+-    u8->println();
+-    //
+-
 -    //
      if (app["config"]["sync"]["url"].as<String>().isEmpty() == false)
+-    {
+-        u8->println(" [S] SYNC ");
+-    }
 +        rows[nrows++] = " [S] SYNC";
-+
+ 
+-    u8->println(" [W] WIFI");
+-    u8->println(" [L] LANGUAGE");
+-    u8->println(" [T] BLE KEYBOARD");
+-    u8->println(" [U] DRIVE MODE");
 +    // Grammana Z (the LLM assistant) - only once claude.json is present
 +    if (gfs()->exists("/claude.json"))
 +        rows[nrows++] = " [G] GRAMMANA";
-+
+ 
+-    u8->println();
+-    u8->println(" [B] BACK ");
 +    rows[nrows++] = " [W] WIFI";
 +    rows[nrows++] = " [L] LANGUAGE";
 +    rows[nrows++] = " [T] BLE KEYS";
@@ -227,43 +236,42 @@ index 966d565..17e0b24 100644
 +                 : "OFF");
 +    rows[nrows++] = pwRow;
 +    rows[nrows++] = " [B] BACK";
-+
-+    // as much leading as the row count allows: airy at 10 rows, and
-+    // still clear of the 300px panel edge when SYNC makes it 11
-+    int lead = (nrows >= 11) ? 24 : 26;
-+    int gap = (nrows >= 11) ? 0 : 8;
-+    for (int i = 0; i < nrows; i++)
-     {
--        u8->println(" [S] SYNC ");
-+        // the BACK entry sits apart from the rest
-+        int y = 48 + i * lead + (i == nrows - 1 ? gap : 0);
-+        u8->setCursor(0, y);
-+        u8->print(rows[i]);
-     }
  
--    u8->println(" [W] WIFI");
--    u8->println(" [L] LANGUAGE");
--    u8->println(" [T] BLE KEYBOARD");
--    u8->println(" [U] DRIVE MODE");
-+    // File Selection
-+    int pos_x = 180;
- 
--    u8->println();
--    u8->println(" [B] BACK ");
-+    // visual separation: a vertical divider between the command column
-+    // and the file list, and a rule under the file header
-+    display->drawLine(172, 25, 172, 299, 1);
-+    display->drawLine(pos_x - 2, 55, 396, 55, 1);
- 
--    // File Selection
+     // File Selection
 -    int pos_x = 190;
 -    u8->setCursor(pos_x, 45);
 -    u8->print("CHOOSE A FILE");
++    int pos_x = 180;
++
++    // visual separation: a vertical divider between the command column
++    // and the file list, plus matching inverted header bars over both
++    display->drawLine(172, 25, 172, 299, 1);
++
++    display->drawFilledRectangle(0, 29, 168, 55, 1);
++    display->drawFilledRectangle(pos_x - 4, 29, 397, 55, 1);
++    u8->setForegroundColor(0);
++    u8->setBackgroundColor(1);
++    u8->setCursor(0, 48);
++    u8->print(" MENU");
 +    u8->setCursor(pos_x, 48);
 +    if (traverse >= 0)
 +        u8->print("ENTER D P ESC");
 +    else
 +        u8->print("CHOOSE A FILE");
++    u8->setForegroundColor(1);
++    u8->setBackgroundColor(0);
++
++    // command rows start level with the file rows; as much leading as
++    // the row count allows while BACK stays clear of the panel edge
++    int lead = (nrows >= 10) ? 24 : 26;
++    int gap = (nrows >= 10) ? 0 : 8;
++    for (int i = 0; i < nrows; i++)
++    {
++        // the BACK entry sits apart from the rest
++        int y = 74 + i * lead + (i == nrows - 1 ? gap : 0);
++        u8->setCursor(0, y);
++        u8->print(rows[i]);
++    }
  
      int file_index = app["config"]["file_index"].as<int>();
      for (int i = 0; i < 10; i++)
@@ -272,16 +280,16 @@ index 966d565..17e0b24 100644
 -        int wordCount = app["config"][format("wordcount_file_%d", i)].as<int>() + app["config"][format("wordcount_buffer_%d", i)].as<int>();
 +        int y = 74 + i * 24;
 +        bool hi = (i == traverse);
-+
+ 
+-        u8->setCursor(pos_x, 75 + i * 20);
+-        u8->printf(" [%d]: %zu", i, wordCount);
 +        // "> " marks the open file; the file's first characters are its
 +        // title (standard font - replaces the word count)
 +        char row[32];
 +        snprintf(row, sizeof(row), "%c[%d] %s",
 +                 i == file_index ? '>' : ' ', i,
 +                 file_titles[i][0] ? file_titles[i] : "-");
- 
--        u8->setCursor(pos_x, 75 + i * 20);
--        u8->printf(" [%d]: %zu", i, wordCount);
++
 +        // traverse highlight: inverse video - a filled bar with the row
 +        // printed white-on-black over it (the bar must be drawn first;
 +        // an opaque glyph reprint over an existing row paints patchy)
@@ -307,7 +315,7 @@ index 966d565..17e0b24 100644
  }
  
  //
-@@ -72,6 +217,92 @@ void Home_keyboard(char key)
+@@ -72,6 +224,92 @@ void Home_keyboard(char key)
      //
      JsonDocument &app = status();
  
@@ -400,7 +408,7 @@ index 966d565..17e0b24 100644
      // home
      if (key == 'S' || key == 's')
      {
-@@ -82,9 +313,32 @@ void Home_keyboard(char key)
+@@ -82,9 +320,32 @@ void Home_keyboard(char key)
          }
      }
  
@@ -434,7 +442,7 @@ index 966d565..17e0b24 100644
          app["menu"]["state"] = MENU_CLEAR;
      }
  
-@@ -121,16 +375,9 @@ void Home_keyboard(char key)
+@@ -121,16 +382,9 @@ void Home_keyboard(char key)
      // chose file
      if (key > 47 && key < 58)
      {
