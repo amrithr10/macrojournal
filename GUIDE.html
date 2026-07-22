@@ -1,0 +1,454 @@
+<style>
+  :root {
+    --ink: #1d201d;
+    --paper: #f3f4ef;
+    --card: #fbfbf8;
+    --rule: #dcdfd6;
+    --muted: #64685f;
+    --accent: #37796a;
+    --accent-soft: #e4ede9;
+    --key-bg: #eceee6;
+    --key-line: #c7cabf;
+    --font-body: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --font-ui: ui-monospace, "SF Mono", "JetBrains Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6e8e1; --paper: #151716; --card: #1e211f;
+      --rule: #2c302d; --muted: #9aa096; --accent: #74b7a6; --accent-soft: #1f2a27;
+      --key-bg: #242724; --key-line: #383c38;
+    }
+  }
+  :root[data-theme="light"] {
+    --ink: #1d201d; --paper: #f3f4ef; --card: #fbfbf8; --rule: #dcdfd6;
+    --muted: #64685f; --accent: #37796a; --accent-soft: #e4ede9;
+    --key-bg: #eceee6; --key-line: #c7cabf;
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6e8e1; --paper: #151716; --card: #1e211f; --rule: #2c302d;
+    --muted: #9aa096; --accent: #74b7a6; --accent-soft: #1f2a27;
+    --key-bg: #242724; --key-line: #383c38;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    max-width: 720px; margin: 0 auto; padding: 0 20px 96px;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 18px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap::before {
+    content: ""; position: fixed; inset: 0; background: var(--paper); z-index: -1;
+  }
+
+  header.hero { padding: 64px 0 28px; border-bottom: 1px solid var(--rule); }
+  .eyebrow {
+    font-family: var(--font-ui); font-size: 12px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+  }
+  h1 { font-size: 46px; line-height: 1.04; margin: 0 0 12px; font-weight: 600;
+       letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { font-size: 20px; color: var(--muted); margin: 0; max-width: 60ch; }
+
+  h2 { font-size: 28px; margin: 56px 0 6px; font-weight: 600; letter-spacing: -0.01em;
+       text-wrap: balance; scroll-margin-top: 20px; }
+  h2 .num {
+    font-family: var(--font-ui); font-size: 13px; color: var(--accent);
+    letter-spacing: 0.1em; display: block; margin-bottom: 6px; font-weight: 400;
+  }
+  h3 { font-size: 19px; margin: 30px 0 4px; font-weight: 600;
+       font-family: var(--font-ui); letter-spacing: 0; }
+  p { margin: 14px 0; }
+  a { color: var(--accent); }
+  strong { font-weight: 600; }
+
+  .toc {
+    font-family: var(--font-ui); font-size: 14px; line-height: 1.5;
+    columns: 2; column-gap: 32px; margin: 28px 0 8px; padding: 0; list-style: none;
+  }
+  .toc li { margin: 0 0 7px; break-inside: avoid; }
+  .toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .toc a:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* device screen */
+  figure.screen { margin: 26px 0 8px; }
+  .bezel {
+    background: linear-gradient(180deg, #34382f, #23261f);
+    border-radius: 16px; padding: 16px; box-shadow: 0 1px 0 rgba(255,255,255,.06) inset,
+      0 10px 26px rgba(0,0,0,.18);
+  }
+  .bezel svg { display: block; width: 100%; height: auto; border-radius: 5px; }
+  figcaption { font-family: var(--font-ui); font-size: 12.5px; color: var(--muted);
+    margin-top: 10px; text-align: center; letter-spacing: 0.02em; }
+
+  /* keycaps */
+  .key {
+    font-family: var(--font-ui); font-size: 13px; line-height: 1;
+    display: inline-block; padding: 3px 7px 4px; border-radius: 6px;
+    background: var(--key-bg); border: 1px solid var(--key-line);
+    box-shadow: 0 1px 0 var(--key-line); white-space: nowrap; color: var(--ink);
+  }
+  .combo { white-space: nowrap; }
+  .combo .plus { color: var(--muted); padding: 0 2px; font-family: var(--font-ui); font-size: 12px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 22px 0; font-size: 16px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule);
+    vertical-align: top; }
+  th { font-family: var(--font-ui); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-weight: 400; }
+  td:first-child { white-space: nowrap; }
+
+  .callout {
+    border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 8px 8px 0;
+    padding: 14px 18px; margin: 24px 0; font-size: 16.5px;
+  }
+  .callout.warn { border-left-color: #b4442f; }
+  .callout .lbl { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 4px; }
+  .callout.warn .lbl { color: #b4442f; }
+
+  code { font-family: var(--font-ui); font-size: 0.86em; background: var(--key-bg);
+    padding: 1px 5px; border-radius: 4px; }
+
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule);
+    font-family: var(--font-ui); font-size: 13px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Illustrated software guide for the RighterDeck writerdeck, walking through each screen with mockups.</h2>
+
+<header class="hero">
+  <p class="eyebrow">Software guide</p>
+  <h1>RighterDeck</h1>
+  <p class="lede">A distraction-free writing deck. Ten notes, a scratchpad, an
+  LLM assistant, real file encryption — all on a 400&times;300 monochrome
+  screen, all from the keyboard. This guide walks through every screen.</p>
+</header>
+
+<ul class="toc">
+  <li><a href="#start">1 · Getting started</a></li>
+  <li><a href="#home">2 · The home screen</a></li>
+  <li><a href="#files">3 · Finding a file</a></li>
+  <li><a href="#write">4 · Writing</a></li>
+  <li><a href="#markdown">5 · Markdown styling</a></li>
+  <li><a href="#scratch">6 · The scratchpad</a></li>
+  <li><a href="#gz">7 · Grammana Z</a></li>
+  <li><a href="#grammar">8 · Grammar check</a></li>
+  <li><a href="#lock">9 · Locking a file</a></li>
+  <li><a href="#dark">10 · Dark mode &amp; name</a></li>
+  <li><a href="#cheat">11 · Shortcut cheat sheet</a></li>
+</ul>
+
+<h2 id="start"><span class="num">01</span>Getting started</h2>
+<p>Flash <code>firmware_rev_8.bin</code> at address <strong>0x0</strong> using the
+web flasher at <a href="https://www.espboards.dev/tools/program/">espboards.dev</a>
+(Chrome or Edge, upper USB-C port). It takes about a minute and doesn't erase
+your notes. Then press the menu key to open the home screen below.</p>
+<p>For the LLM features, enter Drive Mode (<span class="key">U</span> on the menu),
+copy <code>grammana_z.json</code> with your API key onto the drive, and set up
+WiFi (<span class="key">W</span>). Everything else works out of the box.</p>
+
+<h2 id="home"><span class="num">02</span>The home screen</h2>
+<p>The menu is two panels. On the <strong>left</strong> are device commands; on the
+<strong>right</strong>, your files. Arrow keys move a highlight in the active pane and
+<span class="key">Enter</span> runs it — or just press the bracketed letter. The
+device name (<em>RighterDeck</em> by default) sits in the toolbar.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<text x="200" y="18" font-size="13" fill="#1a1c19" text-anchor="middle">RighterDeck</text>
+<line x1="0" y1="25" x2="400" y2="25" stroke="#8b9086"/>
+<line x1="184" y1="25" x2="184" y2="300" stroke="#8b9086"/>
+<rect x="0" y="29" width="182" height="24" fill="#1a1c19"/><text x="6" y="46" font-size="13" fill="#e9ece2">MENU</text>
+<rect x="186" y="29" width="211" height="24" fill="#1a1c19"/><text x="192" y="46" font-size="13" fill="#e9ece2">CHOOSE A FILE [F]</text>
+<g font-size="13" fill="#1a1c19">
+<text x="4" y="77">[I] DARK: OFF</text><text x="4" y="101">[L] LANGUAGE</text>
+<text x="4" y="125">[N] DEVICE NAME</text><text x="4" y="149">[T] BLE KEYS</text>
+<text x="4" y="173">[U] DRIVE</text><text x="4" y="197">[W] WIFI</text>
+<text x="4" y="229">[B] BACK</text>
+</g>
+<g font-size="13" fill="#1a1c19">
+<text x="188" y="77"> [S] SCRATCHPAD</text><text x="188" y="101"> [G] GRAMMANA Z</text><text x="188" y="125"> [/] LAST NOTE[2]</text>
+</g>
+<line x1="186" y1="137" x2="396" y2="137" stroke="#8b9086"/>
+<g font-size="13" fill="#1a1c19">
+<text x="188" y="161">&gt;[0] Morning pages</text><text x="188" y="185"> [1] LOCKED</text>
+<text x="188" y="209"> [2] Novel ch. 3</text><text x="188" y="233"> [3] Letter home</text>
+<text x="188" y="257"> [4] -</text>
+</g>
+<path d="M286 283 l6 6 l6 -6" fill="none" stroke="#1a1c19" stroke-width="2"/>
+</svg>
+</div><figcaption>The home screen — commands left, files right</figcaption></figure>
+
+<p>The file list starts with three quick tools — <strong>Scratchpad</strong>,
+<strong>Grammana&nbsp;Z</strong>, and <strong>Last Note</strong> (jumps to the note you
+edited most recently) — then a separator, then your ten notes. Each note shows its
+first line as a title; empty ones show <code>-</code>, locked ones show
+<code>LOCKED</code>, and <code>&gt;</code> marks whatever's open. A down-chevron means
+there are more notes below.</p>
+
+<h2 id="files"><span class="num">03</span>Finding a file</h2>
+<p>Press <span class="key">F</span> to navigate. A row highlights in inverse video,
+and the left panel changes from commands to the <strong>actions</strong> for that row.
+Arrows move the highlight (the list scrolls); the highlight is sticky, so it stays
+where you left it when you come back.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<text x="200" y="18" font-size="13" fill="#1a1c19" text-anchor="middle">RighterDeck</text>
+<line x1="0" y1="25" x2="400" y2="25" stroke="#8b9086"/>
+<line x1="184" y1="25" x2="184" y2="300" stroke="#8b9086"/>
+<rect x="0" y="29" width="182" height="24" fill="#1a1c19"/><text x="6" y="46" font-size="13" fill="#e9ece2">ACTIONS</text>
+<rect x="186" y="29" width="211" height="24" fill="#1a1c19"/><text x="192" y="46" font-size="13" fill="#e9ece2">CHOOSE A FILE [F]</text>
+<g font-size="13" fill="#1a1c19">
+<text x="4" y="80">ARROWS  MOVE</text><text x="4" y="106">[ENTER] OPEN</text>
+<text x="4" y="132">[D] CLEAR</text><text x="4" y="158">[P] PASSWORD</text>
+<text x="4" y="184">[F] EXIT</text>
+</g>
+<g font-size="13" fill="#1a1c19">
+<text x="188" y="80"> [S] SCRATCHPAD</text><text x="188" y="104"> [G] GRAMMANA Z</text><text x="188" y="128"> [/] LAST NOTE[2]</text>
+</g>
+<line x1="186" y1="140" x2="396" y2="140" stroke="#8b9086"/>
+<g font-size="13" fill="#1a1c19">
+<text x="188" y="166"> [0] Morning pages</text><text x="188" y="190"> [1] LOCKED</text>
+</g>
+<rect x="184" y="197" width="213" height="24" fill="#1a1c19"/>
+<text x="188" y="214" font-size="13" fill="#e9ece2">&gt;[2] Novel ch. 3</text>
+<g font-size="13" fill="#1a1c19">
+<text x="188" y="240"> [3] Letter home</text><text x="188" y="264"> [4] -</text>
+</g>
+</svg>
+</div><figcaption>File navigation — the highlighted row (inverse) is the one actions apply to</figcaption></figure>
+
+<p><span class="key">Enter</span> opens the highlighted item. For notes,
+<span class="key">D</span> clears it and <span class="key">P</span> sets or removes a
+password — the three tools only offer <strong>Open</strong>. <span class="key">F</span>
+or <span class="key">Esc</span> leaves navigation.</p>
+
+<h2 id="write"><span class="num">04</span>Writing</h2>
+<p>The editor is the writing surface. It saves automatically; the status bar shows the
+file, word count, and <code>SAVED</code>. <span class="key">Ctrl</span> and
+<span class="key">GUI</span> (the two keys left of the spacebar) are interchangeable
+in every shortcut.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="34">The morning came grey and slow,</text>
+<text x="12" y="62">and I found myself at the desk</text>
+</g>
+<rect x="11" y="72" width="150" height="20" fill="#1a1c19"/>
+<text x="14" y="87" font-size="14" fill="#e9ece2">before the light</text>
+<g font-size="14" fill="#1a1c19">
+<text x="164" y="87"> did. There</text>
+<text x="12" y="118">is a particular quiet to that</text>
+<text x="12" y="146">hour, before the day asks</text>
+<text x="12" y="174">anything of you.</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19">
+<text x="8" y="289">FILE 0</text><text x="96" y="289">1,204 WORDS</text><text x="352" y="289">SAVED</text>
+</g>
+</svg>
+</div><figcaption>The editor, with a phrase selected (inverse video) and the status bar below</figcaption></figure>
+
+<p>Select by character (<span class="key">Shift</span>+arrows), word
+(<span class="key">Ctrl</span>+<span class="key">Shift</span>+&larr;/&rarr;), line, or
+everything (<span class="key">Ctrl</span>+<span class="key">A</span>). Cut, copy, and
+paste with <span class="key">Ctrl</span>+<span class="key">X</span>/<span class="key">C</span>/<span class="key">V</span>.
+Jump by word with <span class="key">Ctrl</span>+arrows, or across the whole document
+with <span class="key">Ctrl</span>+<span class="key">PgUp</span>/<span class="key">PgDn</span>.
+Full list in the <a href="#cheat">cheat sheet</a>.</p>
+
+<h2 id="markdown"><span class="num">05</span>Markdown styling</h2>
+<p>Your files stay plain text, but the screen styles markdown live as you type — so a
+draft reads the way you mean it without any export step.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="40">This word is <tspan font-weight="bold">**bold**</tspan> and</text>
+<text x="12" y="68">this one is <tspan text-decoration="underline">*italic*</tspan>.</text>
+</g>
+<rect x="12" y="104" width="4" height="70" fill="#1a1c19"/>
+<g font-size="14" fill="#1a1c19">
+<text x="26" y="116">&gt; A quote keeps going on</text>
+<text x="26" y="144">&gt; each new line until you</text>
+<text x="26" y="172">&gt; press Enter on a blank one.</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19"><text x="8" y="289">FILE 3</text><text x="96" y="289">88 WORDS</text></g>
+</svg>
+</div><figcaption>Bold renders heavier, italic as underline, and quotes get a margin bar</figcaption></figure>
+
+<p><span class="key">Ctrl</span>+<span class="key">B</span> and
+<span class="key">Ctrl</span>+<span class="key">I</span> wrap the current selection in
+markers (or drop an empty pair to type into). Italic shows as underline because the
+panel can't slant letters.</p>
+
+<h2 id="scratch"><span class="num">06</span>The scratchpad</h2>
+<p>Press <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">S</span>
+anywhere to open the scratchpad — an always-there note for lists and stray thoughts.
+<span class="key">Esc</span> returns you to whatever you were writing.</p>
+<p>But if you have <strong>text selected</strong>, that same shortcut instead
+<em>sends the selection to the scratchpad</em> without leaving your note — a quick way
+to stash a line while you write. A <code>SENT TO SCRATCH</code> flash confirms it.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="40">She never did explain the</text>
+</g>
+<rect x="11" y="50" width="250" height="20" fill="#1a1c19"/>
+<text x="14" y="65" font-size="14" fill="#e9ece2">key under the third stone.</text>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="96">Maybe that was the point.</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19"><text x="8" y="289">FILE 2</text><text x="96" y="289">640 WORDS</text></g>
+<rect x="186" y="274" width="214" height="24" fill="#1a1c19"/>
+<text x="196" y="289" font-size="12" fill="#e9ece2">SENT TO SCRATCH</text>
+</svg>
+</div><figcaption>Selecting a line and pressing the shortcut stashes it — the flash confirms</figcaption></figure>
+
+<h2 id="gz"><span class="num">07</span>Grammana Z</h2>
+<p>Grammana Z is an on-device assistant, powered by your choice of Anthropic, OpenAI,
+or Gemini. Open it from the file list, with <span class="key">G</span>, or with
+<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">C</span>.
+Type a question and press <span class="key">Shift</span>+<span class="key">Enter</span>
+to send — you can keep typing while it thinks.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="34">What's a stronger word for</text>
+<text x="12" y="60">"walked" that suggests haste?</text>
+<text x="12" y="92" fill="#5a5f55">---</text>
+<text x="12" y="122">Try: hurried, strode, bolted,</text>
+<text x="12" y="148">rushed, or swept. "Strode" keeps</text>
+<text x="12" y="174">composure; "bolted" adds panic.</text>
+<text x="12" y="206" fill="#5a5f55">---</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19"><text x="8" y="289">GZ</text><text x="96" y="289">SHIFT+ENTER TO SEND</text></g>
+</svg>
+</div><figcaption>The whole screen is the conversation; <code>---</code> lines separate turns</figcaption></figure>
+
+<p>The whole note <em>is</em> the conversation, with <code>---</code> lines between
+turns, so follow-ups keep their context. Select-all and delete to start fresh;
+<span class="key">Esc</span> returns to your writing.</p>
+
+<h2 id="grammar"><span class="num">08</span>Grammar check</h2>
+<p><span class="key">Ctrl</span>+<span class="key">G</span> reviews your file — or just a
+selection — and lists what to fix, each with the phrase, the problem, and the
+correction. <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">G</span>
+instead hands back a corrected rewrite in your voice. Either way your original is
+never touched.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="13" fill="#1a1c19">
+<text x="12" y="30">1. "their going" -&gt; wrong form.</text>
+<text x="24" y="50">Use "they're going".</text>
+<text x="12" y="78">2. "less mistakes" -&gt; countable.</text>
+<text x="24" y="98">Use "fewer mistakes".</text>
+<text x="12" y="126">3. Comma splice in line 4; split</text>
+<text x="24" y="146">into two sentences.</text>
+<text x="12" y="180">Overall: clean and readable.</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19"><text x="8" y="289">GRAMMAR</text><text x="120" y="289">[ESC] BACK</text></g>
+</svg>
+</div><figcaption>A grammar report — copyable, and your original stays put</figcaption></figure>
+
+<h2 id="lock"><span class="num">09</span>Locking a file</h2>
+<p>In file navigation, highlight a note and press <span class="key">P</span> to set a
+password. The note is re-written as real <strong>AES-256 ciphertext</strong> — plaintext
+never touches the disk again, so Drive Mode and sync only ever see scrambled bytes.
+Opening it later asks for the password.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="15" fill="#1a1c19">
+<text x="24" y="70">SET PASSWORD FOR FILE 3</text>
+<text x="24" y="120">PASSWORD: ******<tspan fill="#5a5f55">_</tspan></text>
+<text x="24" y="160">[ENTER] OK   [ESC] CANCEL</text>
+</g>
+<g font-size="14" fill="#1a1c19">
+<text x="24" y="216">IF FORGOTTEN, THIS FILE IS</text>
+<text x="24" y="240">LOST FOREVER. NO RECOVERY.</text>
+</g>
+</svg>
+</div><figcaption>The password prompt — no recovery, so test on a throwaway note first</figcaption></figure>
+
+<div class="callout warn">
+  <span class="lbl">No recovery</span>
+  A forgotten password means the file is permanently unreadable — that's the point of
+  real encryption. Leaving a locked file to the menu re-locks it, so you're asked again
+  next time.
+</div>
+
+<h2 id="dark"><span class="num">10</span>Dark mode &amp; naming</h2>
+<p><span class="key">I</span> on the menu flips the whole panel to white-on-black —
+handy at night, and it sticks across reboots. Everything renders inverted, including
+selection and markdown.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#15171a"/>
+<g font-size="14" fill="#e6e8e1">
+<text x="12" y="40">Some nights the words come</text>
+<text x="12" y="68">easier in the dark. White on</text>
+<text x="12" y="96">black, no glare, just the line</text>
+<text x="12" y="124">in front of you.</text>
+</g>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#565b52"/>
+<g font-size="12" fill="#e6e8e1"><text x="8" y="289">FILE 5</text><text x="96" y="289">312 WORDS</text><text x="352" y="289">SAVED</text></g>
+</svg>
+</div><figcaption>Dark mode — hardware panel inversion</figcaption></figure>
+
+<p>To rename the device, press <span class="key">N</span> on the menu and type a new
+name into the header bar; <span class="key">Enter</span> saves it as the toolbar title
+and drops you back into the editor. It's yours — call it whatever your writing deck
+should be called.</p>
+
+<h2 id="cheat"><span class="num">11</span>Shortcut cheat sheet</h2>
+<p><span class="key">Ctrl</span> and <span class="key">GUI</span> are interchangeable
+everywhere below.</p>
+
+<table>
+<thead><tr><th>Do this</th><th>Press</th></tr></thead>
+<tbody>
+<tr><td>Select char / line</td><td><span class="combo"><span class="key">Shift</span><span class="plus">+</span><span class="key">arrows</span></span></td></tr>
+<tr><td>Select word / line</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">arrows</span></span></td></tr>
+<tr><td>Select all</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">A</span></span></td></tr>
+<tr><td>Cut / copy / paste</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">X</span> <span class="key">C</span> <span class="key">V</span></span></td></tr>
+<tr><td>Move by word</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">&larr;/&rarr;</span></span></td></tr>
+<tr><td>Start / end of document</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">PgUp</span> / <span class="key">PgDn</span></span></td></tr>
+<tr><td>Delete word left</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Bksp</span></span></td></tr>
+<tr><td>Undo / redo</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Z</span> / <span class="key">Y</span></span></td></tr>
+<tr><td>Bold / italic</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">B</span> / <span class="key">I</span></span></td></tr>
+<tr><td>Scratchpad (or send selection)</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">S</span></span></td></tr>
+<tr><td>Grammana Z</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">C</span></span></td></tr>
+<tr><td>Grammar check / rewrite</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">G</span> / <span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">G</span></span></td></tr>
+</tbody>
+</table>
+
+<footer>
+RighterDeck — a Micro Journal Rev 8 firmware mod. Built on Micro Journal by Un Kyu
+Lee (CC BY-NC 4.0). See the README for flashing, configuration, and the full
+reference.
+</footer>
+
+</div>
