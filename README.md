@@ -180,9 +180,10 @@ included in sync).
 **Send selection to scratchpad** — if you have text highlighted in a
 note, Ctrl+Shift+S instead appends that selection to the scratchpad (on
 its own line) *without leaving the note* — a quick way to stash a
-snippet while writing. The note is untouched; the selection clears as
-confirmation. (Sending from an encrypted note writes that snippet to the
-scratchpad in plain text, since the scratchpad isn't encrypted.)
+snippet while writing. The note and your selection are untouched; a
+`SENT TO SCRATCH` flash by the word count confirms it for 3 seconds.
+(Sending from an encrypted note writes that snippet to the scratchpad in
+plain text, since the scratchpad isn't encrypted.)
 
 ### Dark mode
 
