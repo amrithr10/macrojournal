@@ -69,7 +69,7 @@ index 3c572fc..33696dc 100644
  
      // go back to home menu
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..756f899 100644
+index 966d565..6598745 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 @@ -6,6 +6,135 @@
@@ -392,9 +392,9 @@ index 966d565..756f899 100644
  
 -    u8->println();
 -    u8->println(" [B] BACK ");
-+        // notes drop a few px so the tools/notes separator has clear air
++        // notes drop a few px so the tools/notes separator has equal air
 +        // above and below (and clears the highlight bands in F mode)
-+        int extra = (e >= 3) ? 6 : 0;
++        int extra = (e >= 3) ? 8 : 0;
 +        int y = LIST_Y0 + v * LIST_LEAD + extra;
  
 -    // File Selection
@@ -876,7 +876,7 @@ index f160606..d183f55 100644
  
      //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..ab45b8c 100644
+index bade544..ec7519e 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,8 @@
@@ -1221,16 +1221,17 @@ index bade544..ab45b8c 100644
      // CLEAR BACKGROUND
      WP_render_clear(display, u8);
  
-@@ -161,6 +459,8 @@ bool WP_contentChanged()
+@@ -161,6 +459,9 @@ bool WP_contentChanged()
      static int wordCount_prev = -1;
      static int file_index_prev = -1;
      static int blinkPhase_prev = -1;
 +    static int askState_prev = -1;
 +    static int selectAnchor_prev = -1;
++    static bool scratchFlash_prev = false;
  
      JsonDocument &app = status();
  
-@@ -170,6 +470,7 @@ bool WP_contentChanged()
+@@ -170,6 +471,7 @@ bool WP_contentChanged()
      bool saved = Editor::getInstance().saved;
      int wordCount = Editor::getInstance().wordCountFile + Editor::getInstance().wordCountBuffer;
      int file_index = app["config"]["file_index"].as<int>();
@@ -1238,28 +1239,30 @@ index bade544..ab45b8c 100644
      // flips every 500ms, matching WP_render_cursor()'s blink rate
      int blinkPhase = (millis() / 500) % 2;
  
-@@ -180,7 +481,9 @@ bool WP_contentChanged()
+@@ -180,7 +482,10 @@ bool WP_contentChanged()
                     saved != saved_prev ||
                     wordCount != wordCount_prev ||
                     file_index != file_index_prev ||
 -                   blinkPhase != blinkPhase_prev;
 +                   selectAnchor != selectAnchor_prev ||
 +                   blinkPhase != blinkPhase_prev ||
-+                   askclaude_status() != askState_prev;
++                   askclaude_status() != askState_prev ||
++                   (millis() < scratch_flash_until) != scratchFlash_prev;
  
      cursorPos_prev = cursorPos;
      cursorLinePos_prev = cursorLinePos;
-@@ -188,7 +491,9 @@ bool WP_contentChanged()
+@@ -188,7 +493,10 @@ bool WP_contentChanged()
      saved_prev = saved;
      wordCount_prev = wordCount;
      file_index_prev = file_index;
 +    selectAnchor_prev = selectAnchor;
      blinkPhase_prev = blinkPhase;
 +    askState_prev = askclaude_status();
++    scratchFlash_prev = millis() < scratch_flash_until;
  
      return changed;
  }
-@@ -244,6 +549,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -244,6 +552,14 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          clear_background = true;
      }
  
@@ -1274,7 +1277,7 @@ index bade544..ab45b8c 100644
      //
      JsonDocument &app = status();
  
-@@ -304,20 +617,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -304,20 +620,167 @@ void WP_render_clear(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
  }
  
  //
@@ -1365,9 +1368,10 @@ index bade544..ab45b8c 100644
          if (value == '\n')
 +        {
 +            i++;
-+            continue;
+             continue;
 +        }
-+
+ 
+-        u8->print(value);
 +        bool selected = selStart >= 0 &&
 +                        lineStart + i >= selStart &&
 +                        lineStart + i < selEnd;
@@ -1403,7 +1407,7 @@ index bade544..ab45b8c 100644
 +            for (int k = 0; k < mlen; k++)
 +                u8->print(line[i + k]);
 +            i += mlen;
-             continue;
++            continue;
 +        }
 +
 +        // one whole UTF-8 character (continuation bytes have 10xxxxxx)
@@ -1436,8 +1440,7 @@ index bade544..ab45b8c 100644
 +
 +        i += clen;
 +    }
- 
--        u8->print(value);
++
 +    // restore normal drawing state for the next line / status bar.
 +    // bg must go back to 0: setFont() re-enables background drawing on
 +    // every font change, so a leftover bg of 1 would paint black boxes
@@ -1450,7 +1453,7 @@ index bade544..ab45b8c 100644
      }
  }
  
-@@ -382,11 +842,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -382,11 +845,19 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
      // STATUS BAR
      display->drawLine(0, STATUSBAR_Y - 16, screen_width, STATUSBAR_Y - 16, 1);
  
@@ -1472,7 +1475,7 @@ index bade544..ab45b8c 100644
  
      // WORD COUNT
      u8->setCursor(100, STATUSBAR_Y);
-@@ -403,7 +871,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -403,7 +874,7 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          u8->printf(locale.c_str());
      }
  
@@ -1481,18 +1484,26 @@ index bade544..ab45b8c 100644
      if (Editor::getInstance().saved)
      {
          // when saved write SAVED
-@@ -415,6 +883,22 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+@@ -415,6 +886,30 @@ void WP_render_status(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
          // don't show "SAVED"
          display->drawFilledRectangle(200, STATUSBAR_Y - 12, screen_width, screen_height, 0);
      }
 +
 +    // SEND-TO-SCRATCHPAD flash (3s) - sits after the word count
-+    if (millis() < scratch_flash_until)
++    static bool flash_prev = false;
++    bool flash_now = millis() < scratch_flash_until;
++    if (flash_now)
 +    {
 +        display->drawFilledRectangle(185, STATUSBAR_Y - 12, screen_width, screen_height, 0);
 +        u8->setCursor(195, STATUSBAR_Y);
 +        u8->print("SENT TO SCRATCH");
 +    }
++    else if (flash_prev)
++    {
++        // just expired: force one full repaint to erase the message
++        Editor::getInstance().pageChanged = true;
++    }
++    flash_prev = flash_now;
 +
 +    // ASK CLAUDE STATUS (busy / error) - overrides the right side of the bar
 +    if (askclaude_status() != ASK_IDLE)
@@ -1504,7 +1515,7 @@ index bade544..ab45b8c 100644
  }
  
  //
-@@ -478,6 +962,82 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,6 +973,82 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -1587,7 +1598,7 @@ index bade544..ab45b8c 100644
      //
      JsonDocument &app = status();
  
-@@ -486,14 +1046,138 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -486,14 +1057,138 @@ void WP_keyboard(int key, bool pressed, int index)
      {
          if (!pressed)
          {
@@ -1731,7 +1742,7 @@ index bade544..ab45b8c 100644
          }
      }
  
-@@ -505,15 +1189,12 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,15 +1200,12 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
