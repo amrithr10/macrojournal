@@ -146,8 +146,9 @@ It has three parts:
   `[0]`–`[9]`. Each row shows the note's **name** (if set) or its first
   line as a title, `-` when empty, or `LOCKED` when encrypted. A scroll bar
   and a down-arrow appear when there are more rows than fit.
-- **Action bar** at the bottom — the keys that act on the highlighted note:
-  `C CLEAR · P LOCK · R RENAME`.
+- **Action bar** at the bottom — two rows of Ctrl shortcuts for the
+  highlighted note: `^C CLEAR · ^L LOCK · ^R RENAME`, then `⏎ OPEN · ^S SYNC`
+  (`^` = Ctrl).
 
 **Navigation**
 
@@ -163,44 +164,48 @@ It has three parts:
 | `S` | Scratchpad |
 | `G` | Grammana Z |
 | `/` | Last note |
-| `N` | New note (first empty slot) |
-| `P` | Lock / unlock the highlighted note |
-| `R` | Rename the highlighted note |
-| `C` | Clear the highlighted note |
+| `N` (or `Ctrl+N`) | New note (first empty slot) |
+| `Ctrl+L` | Lock / unlock the highlighted note |
+| `Ctrl+R` | Rename the highlighted note |
+| `Ctrl+C` | Clear the highlighted note (copy has no meaning here) |
+| `Ctrl+S` | Sync the highlighted note |
 | `W` `L` `B` `I` `U` | WiFi · Language · BLE keyboard · Dark mode · Drive mode |
-| `Esc` / menu key | Open the menu bar |
+| `Esc` · double-tap `Alt` · `Ctrl+~` | Open the menu bar |
+
+The note verbs (`^C ^L ^R ^S`) are **Ctrl shortcuts** now — a stray letter
+can't clear or lock a note by accident, and they also work from inside a note
+(acting on the note you're editing). `Ctrl+C` means clear only here on the home
+screen; in the editor it stays copy.
 
 ## The menu bar
 
 The pull-down menu bar is the classic way to reach everything. Open it and
 you can drive the whole device from the keyboard.
 
-**Opening it**
+**Opening it** — from the home screen or from inside a note: **double-tap the
+Alt key** (the key next to Ctrl/GUI, tapped twice quickly), or press
+**`Ctrl+~`**. (On the home screen `Esc` also opens it.)
 
-- From the **home screen**: press **Esc** or the menu key.
-- From **inside a note**: press **Esc**, the menu key, or **double-tap the
-  Alt key** (the key next to Ctrl/GUI, tapped twice quickly).
+> `Ctrl+~` needs a backtick/tilde key in your layout — the author's
+> `keyboard.json` doesn't have one, so use double-tap `Alt` there.
 
 **Using it**
 
 - **←/→** move between the five menus; **↑/↓** move within the open menu;
   **Enter** runs the highlighted item.
-- A menu item's **shortcut letter** is shown on its right, and pressing that
-  letter runs it from anywhere in the bar.
-- The escape ladder from an open menu:
-  - **Esc** → leave the bar (to the home screen, or back to the note if you
-    opened it from a sub-screen).
-  - **Shift+Esc** (in a note) → close the bar and drop the cursor back
-    exactly where it was.
+- The note actions list their **Ctrl shortcut** (`^C`, `^L`, …) on the right;
+  those fire globally, so you rarely need to open the menu for them.
+- **Esc** closes the bar and drops you back exactly where you were (the note
+  or the home screen).
 
 **The menus**
 
 | Menu | Items |
 |---|---|
-| **File** | New note (`N`); for the selected note: Rename (`R`), Lock / Unlock (`P`), Clear (`C`) |
+| **File** | New note (`^N`); for the selected note: Rename (`^R`), Lock / Unlock (`^L`), Clear (`^C`), Sync (`^S`) |
 | **Notes** | Every non-empty note, by name or title — jump straight to one |
 | **Tools** | Grammana (`G`), Scratchpad (`S`) |
-| **Setup** | WiFi (`W`), Language (`L`), BLE keyboard (`B`), Dark on/off (`I`), Sync (when configured) |
+| **Setup** | WiFi (`W`), Language (`L`), BLE keyboard (`B`), Dark on/off (`I`), Sync all (when configured) |
 | **Device** | About, Device name, Storage, Drive mode (`U`), Restart |
 
 ## Working with notes
@@ -214,12 +219,14 @@ and press **Enter**, or press its direct key.
 | Key | Action |
 |---|---|
 | `Enter` | Open it |
-| `R` | **Rename** — give it a name (or clear the name) |
-| `P` | Set / remove its **password** |
-| `C` | **Clear** it (asks to confirm; locked notes verify the password first) |
+| `Ctrl+R` | **Rename** — give it a name (or clear the name) |
+| `Ctrl+L` | **Lock / unlock** — set or remove its password |
+| `Ctrl+C` | **Clear** it (asks to confirm; locked notes verify the password first) |
+| `Ctrl+S` | **Sync** it to Google Drive |
 
 These are exactly the `File` menu's items and the action bar at the bottom
-of the home screen — use whichever you like. Clearing keeps a
+of the home screen — use whichever you like. The same `^L`/`^R`/`^S` work
+inside the editor too, acting on the note you're writing. Clearing keeps a
 `*_backup.txt`.
 
 **New notes** — press **`N`** on the home screen, choose **File ▸ New
@@ -231,8 +238,8 @@ all ten slots are in use, nothing happens.
 
 Any note can have a real name instead of showing its first line.
 
-- **Rename** with `R` on the home screen, **File ▸ Rename**, or the
-  `R RENAME` action bar. A small dialog opens pre-filled with the current
+- **Rename** with `Ctrl+R` on the home screen, **File ▸ Rename**, or the
+  `^R RENAME` action bar. A small dialog opens pre-filled with the current
   name: type up to 20 characters, **Enter** saves, **Esc** cancels. Clear
   the field and save to drop the name and go back to the first-line title.
 - A named note shows that name on the home screen, in the **Notes** menu,
@@ -266,11 +273,15 @@ on disk. Files save automatically.
 | Undo / redo | Ctrl + Z / Y |
 | Bold / italic markers | Ctrl + B / I |
 | New note | Ctrl + N |
+| Lock / unlock this note | Ctrl + L |
+| Rename this note | Ctrl + R |
+| Sync this note | Ctrl + S |
 | Open / send-to scratchpad | Ctrl+Shift + S |
 | Grammana Z assistant | Ctrl+Shift + C |
 | Grammar check | Ctrl + G |
 | Grammar rewrite | Ctrl+Shift + G |
-| Open the menu bar | Esc, menu key, or double-tap Alt |
+| Leave the note (to the home menu) | Esc |
+| Open the menu bar | double-tap Alt, or Ctrl+~ |
 
 Selections render in **inverse video**. Typing replaces the selection;
 Backspace/DEL deletes it; plain cursor movement drops it. The clipboard
@@ -346,9 +357,9 @@ can be overridden with `grammar_system` / `rewrite_system` in the config.
 
 ## Per-file passwords (encryption)
 
-To lock or unlock a note, highlight it on the home screen and press **`P`**
-(or use **File ▸ Lock / Unlock**) — locked notes verify the old password
-first, so you don't have to open the file.
+To lock or unlock a note, highlight it on the home screen and press
+**`Ctrl+L`** (or use **File ▸ Lock / Unlock**) — locked notes verify the old
+password first, so you don't have to open the file.
 
 Setting a password re-writes the file as **AES-256-CTR ciphertext**, so
 plaintext never touches the disk again — Drive Mode, sync, and backups
@@ -424,9 +435,17 @@ the menu bar (or their home-screen hotkeys).
 
 ## Sync to Google Drive
 
-**Setup ▸ Sync** uploads the current note to Google Drive through a Google
-Apps Script endpoint. The entry only appears once a URL is configured (in
-`config.json` under `sync.url`; there is no on-device setup for the URL).
+Sync uploads notes to Google Drive through a Google Apps Script endpoint,
+in two flavours:
+
+- **Sync this note** — `Ctrl+S` (or the `^S SYNC` action bar / `File ▸ Sync`)
+  syncs the selected note on the home screen, or the note you're editing.
+- **Sync all** — `Setup ▸ Sync all` uploads every non-empty note (0–9) plus
+  the scratchpad in one WiFi session, showing `Syncing 3 of 7…` as it goes;
+  a note that fails doesn't stop the rest.
+
+Both only appear once a URL is configured (in `config.json` under `sync.url`;
+there is no on-device setup for the URL). Locked notes sync as ciphertext.
 
 **Named files** — the deck sends the note's name along with the upload, so
 the file in Drive is titled after the note (a named note by its name, an
