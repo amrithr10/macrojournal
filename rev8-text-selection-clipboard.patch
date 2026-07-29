@@ -495,10 +495,10 @@ index 0000000..f4bcd4e
 +void FreeSpace_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
 +void FreeSpace_keyboard(char key);
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-index 966d565..e158b35 100644
+index 966d565..a1ed706 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.cpp
-@@ -4,133 +4,762 @@
+@@ -4,133 +4,790 @@
  #include "display/display.h"
  #include "keyboard/keyboard.h"
  
@@ -516,7 +516,7 @@ index 966d565..e158b35 100644
 +// light grey desktop. Selection is shown with a box (text stays black on
 +// white). Left/Right move across tools, Down drops into notes, Up from the
 +// top note returns; the notes list wraps (Down past the end -> top).
-+#define NOTE_VIS 6
++#define NOTE_VIS 5
 +#define K_LEFT 18
 +#define K_RIGHT 19
 +#define K_UP 20
@@ -550,13 +550,14 @@ index 966d565..e158b35 100644
 +static const int TY0 = 37, TY1 = 85;          // tiles row (flat, floating)
 +static const int TILE_L[3] = {16, 142, 268};  // even-aligned for the half-res-x
 +static const int TILE_R[3] = {134, 260, 384}; // panel, so all three match
-+static const int NY0 = 93, NY1 = 246;         // notes window panel (6 rows)
++static const int NY0 = 93, NY1 = 226;         // notes window panel (5 rows)
 +static const int NLIST_Y0 = 133, NLIST_LEAD = 21;
 +static const int TEXT_X = 26;
 +static const int LIST_R = 360, SB_X = 365;
-+static const int SB_TOP = 117, SB_BOT = 243;
-+static const int FT_Y0 = 253, FT_Y1 = 287; // action footer panel
-+static const int ACT_Y = 275;              // footer text baseline
++static const int SB_TOP = 117, SB_BOT = 222;
++static const int FT_Y0 = 233, FT_Y1 = 293; // two-row action footer panel
++static const int ACT_Y1 = 256;             // footer row 1 baseline (^C ^L ^R)
++static const int ACT_Y2 = 284;             // footer row 2 baseline (Enter / ^S)
 +
 +static const int BAR_X[5] = {18, 78, 150, 222, 294};
 +static const char *BAR_T[5] = {"File", "Notes", "Tools", "Setup", "Device"};
@@ -610,20 +611,29 @@ index 966d565..e158b35 100644
 +}
 +
 +// draw a DOS-bar command: its label in a reversed (black) block starting at
-+// x, on the action-footer baseline. The block edge is what separates the key
-+// (drawn plain, just before) from its command - Norton Commander style.
++// x, on baseline y. The block edge is what separates the key (drawn plain,
++// just before) from its command - Norton Commander style.
 +static void dos_cmd(ST7305_4p2_BW_DisplayDriver *d, U8G2_FOR_ST73XX *u8,
-+                    int x, const char *s)
++                    int x, int y, const char *s)
 +{
 +    int w = (int)strlen(s) * UI_TRACK_CW + 10;
 +    // block centred on the all-caps command text: even ~3px padding top and
 +    // bottom (labels are all-caps now, so there are no descenders to clear)
-+    d->drawFilledRectangle(x, ACT_Y - 17, x + w, ACT_Y + 3, 1);
++    d->drawFilledRectangle(x, y - 17, x + w, y + 3, 1);
 +    u8->setForegroundColor(0);
 +    u8->setBackgroundColor(1);
-+    ui_print_tracked(u8, x + 6, ACT_Y, s, UI_TRACK_CW);
++    ui_print_tracked(u8, x + 6, y, s, UI_TRACK_CW);
 +    u8->setForegroundColor(1);
 +    u8->setBackgroundColor(0);
++}
++
++// a small return-arrow glyph (the Enter key / OPEN), baseline at y
++static void ret_arrow(ST7305_4p2_BW_DisplayDriver *d, int x, int y)
++{
++    d->drawLine(x + 12, y - 12, x + 12, y - 2, 1); // riser
++    d->drawLine(x + 2, y - 2, x + 12, y - 2, 1);   // base
++    d->drawLine(x + 2, y - 2, x + 7, y - 7, 1);    // arrowhead upper
++    d->drawLine(x + 2, y - 2, x + 7, y + 3, 1);    // arrowhead lower
 +}
 +
 +// ---- helpers ------------------------------------------------------------
@@ -1036,17 +1046,21 @@ index 966d565..e158b35 100644
 +        }
 +    }
 +
-+    // ACTION FOOTER - a matted floating panel (Norton/Turbo DOS bar): each key
-+    // plain with its command in a reversed block, ordered by key letter
-+    // C / P / R. OPEN is dropped (ENTER opens the selection universally); NEW
-+    // isn't note-specific. Even-aligned; last block sits clear of the edge.
++    // ACTION FOOTER - a matted floating Norton/Turbo DOS bar in two rows.
++    // Row 1 is the note-editing verbs (^C clear / ^L lock / ^R rename); row 2,
++    // centred, is Enter=OPEN and ^S=SYNC. The commands fire on Ctrl+<letter>
++    // (^C reuses copy - there's nothing to copy here). Even-aligned (half-res-x).
 +    panel_mat(display, PANEL_L, FT_Y0, PANEL_R, FT_Y1);
-+    ui_print_tracked(u8, 30, ACT_Y, "C", UI_TRACK_CW);
-+    dos_cmd(display, u8, 48, "CLEAR");
-+    ui_print_tracked(u8, 152, ACT_Y, "P", UI_TRACK_CW);
-+    dos_cmd(display, u8, 170, "LOCK");
-+    ui_print_tracked(u8, 260, ACT_Y, "R", UI_TRACK_CW);
-+    dos_cmd(display, u8, 278, "RENAME");
++    ui_print_tracked(u8, 26, ACT_Y1, "^C", UI_TRACK_CW);
++    dos_cmd(display, u8, 56, ACT_Y1, "CLEAR");
++    ui_print_tracked(u8, 150, ACT_Y1, "^L", UI_TRACK_CW);
++    dos_cmd(display, u8, 180, ACT_Y1, "LOCK");
++    ui_print_tracked(u8, 256, ACT_Y1, "^R", UI_TRACK_CW);
++    dos_cmd(display, u8, 286, ACT_Y1, "RENAME");
++    ret_arrow(display, 96, ACT_Y2);
++    dos_cmd(display, u8, 114, ACT_Y2, "OPEN");
++    ui_print_tracked(u8, 212, ACT_Y2, "^S", UI_TRACK_CW);
++    dos_cmd(display, u8, 242, ACT_Y2, "SYNC");
 +
 +    if (menubar_active())
 +        menubar_render(display, u8);
@@ -1088,7 +1102,8 @@ index 966d565..e158b35 100644
  }
  
 -//
- void Home_keyboard(char key)
+-void Home_keyboard(char key)
++void Home_keyboard(int key)
  {
 -    //
      JsonDocument &app = status();
@@ -1103,7 +1118,9 @@ index 966d565..e158b35 100644
 +        if (key == 27 || key == MENU)
 +            renaming = false;
 +        else if (key == '\n')
-+        {
+         {
+-            // to sync
+-            app["menu"]["state"] = MENU_SYNC;
 +            if (rename_slot == DEVNAME_SLOT)
 +            {
 +                String v = String(rename_buf);
@@ -1120,14 +1137,12 @@ index 966d565..e158b35 100644
 +        {
 +            if (rename_len > 0)
 +                rename_buf[--rename_len] = '\0';
-+        }
+         }
 +        else if (key >= 32 && key <= 126 && rename_len < cap)
-         {
--            // to sync
--            app["menu"]["state"] = MENU_SYNC;
++        {
 +            rename_buf[rename_len++] = (char)key;
 +            rename_buf[rename_len] = '\0';
-         }
++        }
 +        Menu_clear();
 +        return;
      }
@@ -1165,7 +1180,8 @@ index 966d565..e158b35 100644
      }
  
 -    else if (key == 'w')
-+    if (key == 27 || key == MENU)
++    // the home screen keeps Esc as a bar opener (unchanged); Ctrl+~ opens it too
++    if (key == 27 || key == MENU || key == KEY_MENUBAR)
      {
 -        // move to keyboard layout
 -        app["menu"]["state"] = MENU_WIFI;
@@ -1241,7 +1257,9 @@ index 966d565..e158b35 100644
  
 -    // chose file
 -    if (key > 47 && key < 58)
-+    if (key == 'p' || key == 'P')
++    // Contextual note actions on Ctrl shortcuts (footer ^C/^L/^R/^S). ^C reuses
++    // KEY_COPY - there is nothing to copy on the home screen, so it clears.
++    if (key == KEY_LOCK)
      {
 -        // save config
 -        int file_index = key - 48;
@@ -1255,14 +1273,14 @@ index 966d565..e158b35 100644
 +            WP_requestPasswordFor(n);
 +        return;
 +    }
-+    if (key == 'r' || key == 'R')
++    if (key == KEY_RENAME)
 +    {
 +        int n = selected_note();
 +        if (n >= 0 && n <= 9)
 +            start_rename(n);
 +        return;
 +    }
-+    if (key == 'c' || key == 'C')
++    if (key == KEY_COPY)
 +    {
 +        int n = selected_note();
 +        if (n >= 0 && n <= 9)
@@ -1278,6 +1296,17 @@ index 966d565..e158b35 100644
 +                confirm_clear = n;
 +                Menu_clear();
 +            }
++        }
++        return;
++    }
++    if (key == KEY_SYNC)
++    {
++        int n = selected_note();
++        if (n >= 0 && n <= 9)
++        {
++            app["sync"]["target"] = n;
++            app["sync"]["all"] = false;
++            app["menu"]["state"] = MENU_SYNC;
 +        }
 +        return;
 +    }
@@ -1307,18 +1336,18 @@ index 966d565..e158b35 100644
 +    }
 +    if (key == '/')
 +    {
-+        app["screen"] = WORDPROCESSOR;
-+        WP_openFileGuarded(app["config"]["last_note"].as<int>());
-+        return;
-+    }
-+    if (key >= '0' && key <= '9')
-+    {
          app["screen"] = WORDPROCESSOR;
-+        WP_openFileGuarded(key - '0');
++        WP_openFileGuarded(app["config"]["last_note"].as<int>());
 +        return;
      }
 -}
 \ No newline at end of file
++    if (key >= '0' && key <= '9')
++    {
++        app["screen"] = WORDPROCESSOR;
++        WP_openFileGuarded(key - '0');
++        return;
++    }
 +
 +    if (key == 'w' || key == 'W')
 +        app["menu"]["state"] = MENU_WIFI;
@@ -1336,6 +1365,17 @@ index 966d565..e158b35 100644
 +        display_RLCD_dark(dark);
 +    }
 +}
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.h b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.h
+index d0c832b..e0acc28 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.h
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Home/Home.h
+@@ -10,5 +10,5 @@ void Home_setup(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
+ void Home_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
+ 
+ // 
+-void Home_keyboard(char key);
++void Home_keyboard(int key);
+ 
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
 index af10c48..6e29955 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Layout/Layout.cpp
@@ -1354,7 +1394,7 @@ index af10c48..6e29955 100644
      app["menu"]["state"] = MENU_HOME;
  }
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
-index 20809a1..7a6041e 100644
+index 20809a1..5569077 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.cpp
 @@ -10,6 +10,11 @@
@@ -1451,6 +1491,15 @@ index 20809a1..7a6041e 100644
      // save prev state
      menu_state_prev = menu_state;
  }
+@@ -139,7 +175,7 @@ bool Menu_needsDisplay()
+ }
+ 
+ //
+-void Menu_keyboard(char key)
++void Menu_keyboard(int key)
+ {
+     //
+     JsonDocument &app = status();
 @@ -149,6 +185,26 @@ void Menu_keyboard(char key)
  
      // based on the current menu state
@@ -1499,11 +1548,39 @@ index 20809a1..7a6041e 100644
  }
  
  //
+diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.h b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.h
+index 8169aad..e64db6b 100644
+--- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.h
++++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Menu.h
+@@ -14,7 +14,7 @@ void Menu_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8);
+ bool Menu_needsDisplay();
+ 
+ //
+-void Menu_keyboard(char key);
++void Menu_keyboard(int key);
+ 
+ //
+ void Menu_clear();
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
-index c7b8a61..2d68f2e 100644
+index c7b8a61..7c521a3 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/Menu/Sync/Sync.cpp
-@@ -85,6 +85,7 @@ void Sync_keyboard(char key)
+@@ -70,8 +70,12 @@ void Sync_render(ST7305_4p2_BW_DisplayDriver *display, U8G2_FOR_ST73XX *u8)
+ 
+     else if (sync_state == SYNC_COMPLETED)
+     {
+-        //
+-        u8->println("SYNC Completed. Press any key to exit");
++        String message = app["sync_message"].as<String>();
++        if (message != "" && message != "null")
++            u8->println(message);
++        else
++            u8->println("SYNC Completed.");
++        u8->println("Press any key to exit");
+     }
+ }
+ 
+@@ -85,6 +89,7 @@ void Sync_keyboard(char key)
      int sync_state = app["sync_state"].as<int>();
      if (sync_state == SYNC_COMPLETED || sync_state == SYNC_ERROR)
      {
@@ -1514,10 +1591,10 @@ index c7b8a61..2d68f2e 100644
  }
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/MenuBar/MenuBar.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/MenuBar/MenuBar.cpp
 new file mode 100644
-index 0000000..47a24a1
+index 0000000..e98aa71
 --- /dev/null
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/MenuBar/MenuBar.cpp
-@@ -0,0 +1,567 @@
+@@ -0,0 +1,604 @@
 +#include "MenuBar.h"
 +
 +#include <Arduino.h>
@@ -1545,7 +1622,8 @@ index 0000000..47a24a1
 +    A_LANG,
 +    A_BLE,
 +    A_DARK,
-+    A_SYNC,
++    A_SYNC_NOTE,
++    A_SYNC_ALL,
 +    A_ABOUT,
 +    A_DEVNAME,
 +    A_FREESPACE,
@@ -1561,7 +1639,8 @@ index 0000000..47a24a1
 +struct MBItem
 +{
 +    char label[18];
-+    char shortcut; // letter shown at the right, 0 = none
++    char shortcut;  // single letter accelerator shown at the right, 0 = none
++    char accel[5];  // a Ctrl-shortcut label like "^L" (display only, no bare key)
 +    int action;
 +};
 +struct MBMenu
@@ -1591,8 +1670,21 @@ index 0000000..47a24a1
 +    strncpy(m.items[m.count].label, label, sizeof(m.items[0].label) - 1);
 +    m.items[m.count].label[sizeof(m.items[0].label) - 1] = '\0';
 +    m.items[m.count].shortcut = shortcut;
++    m.items[m.count].accel[0] = '\0';
 +    m.items[m.count].action = action;
 +    m.count++;
++}
++
++// tag the item just added with a Ctrl-shortcut label (e.g. "^L"); this is a
++// display hint only and clears the bare-letter accelerator so it can't collide
++// with another menu's letter (the action fires globally on Ctrl+<letter>).
++static void set_accel(MBMenu &m, const char *a)
++{
++    if (m.count == 0)
++        return;
++    strncpy(m.items[m.count - 1].accel, a, sizeof(m.items[0].accel) - 1);
++    m.items[m.count - 1].accel[sizeof(m.items[0].accel) - 1] = '\0';
++    m.items[m.count - 1].shortcut = 0;
 +}
 +
 +static MBMenu &add_menu(const char *title)
@@ -1673,12 +1765,18 @@ index 0000000..47a24a1
 +    // home row); shown only when the target is a real note 0-9
 +    {
 +        MBMenu &m = add_menu("File");
-+        add_item(m, "New note", 'N', A_NEW);
++        add_item(m, "New note", 0, A_NEW);
++        set_accel(m, "^N");
 +        if (s_target >= 0 && s_target <= 9)
 +        {
-+            add_item(m, "Rename", 'R', A_RENAME);
-+            add_item(m, "Lock / Unlock", 'P', A_LOCK);
-+            add_item(m, "Clear", 'C', A_CLEAR);
++            add_item(m, "Rename", 0, A_RENAME);
++            set_accel(m, "^R");
++            add_item(m, "Lock / Unlock", 0, A_LOCK);
++            set_accel(m, "^L");
++            add_item(m, "Clear", 0, A_CLEAR);
++            set_accel(m, "^C");
++            add_item(m, "Sync", 0, A_SYNC_NOTE);
++            set_accel(m, "^S");
 +        }
 +    }
 +    // Notes - only non-empty slots
@@ -1715,7 +1813,7 @@ index 0000000..47a24a1
 +        add_item(m, dk, 'I', A_DARK);
 +        String url = app["config"]["sync"]["url"].as<String>();
 +        if (!url.isEmpty() && url != "null")
-+            add_item(m, "Sync", 0, A_SYNC);
++            add_item(m, "Sync all", 0, A_SYNC_ALL);
 +    }
 +    // Device
 +    {
@@ -1849,7 +1947,16 @@ index 0000000..47a24a1
 +        display_RLCD_dark(d);
 +        break;
 +    }
-+    case A_SYNC:
++    case A_SYNC_NOTE:
++        if (s_target >= 0 && s_target <= 9)
++        {
++            app["sync"]["target"] = s_target;
++            app["sync"]["all"] = false;
++            go_menu(MENU_SYNC);
++        }
++        break;
++    case A_SYNC_ALL:
++        app["sync"]["all"] = true;
 +        go_menu(MENU_SYNC);
 +        break;
 +    case A_ABOUT:
@@ -1911,8 +2018,8 @@ index 0000000..47a24a1
 +
 +    MBMenu &mn = s_menus[s_menu];
 +
-+    if (key == 27) // Esc, or Shift+Esc
-+        return keyboard_shift_pressed() ? MB_TO_NOTE : MB_TO_HOME;
++    if (key == 27) // Esc closes the bar, back to where you were (note or home)
++        return MB_TO_NOTE;
 +
 +    if (key == 18) // left
 +    {
@@ -2038,7 +2145,9 @@ index 0000000..47a24a1
 +    for (int i = 0; i < mn.count; i++)
 +    {
 +        int lw = (int)strlen(mn.items[i].label) * UI_TRACK_CW;
-+        if (mn.items[i].shortcut)
++        if (mn.items[i].accel[0])
++            lw += ((int)strlen(mn.items[i].accel) + 2) * UI_TRACK_CW;
++        else if (mn.items[i].shortcut)
 +            lw += 36;
 +        if (lw > boxw)
 +            boxw = lw;
@@ -2073,7 +2182,12 @@ index 0000000..47a24a1
 +            u8->setBackgroundColor(1);
 +        }
 +        ui_print_tracked(u8, boxx + 10, baseline, mn.items[i].label, UI_TRACK_CW);
-+        if (mn.items[i].shortcut)
++        if (mn.items[i].accel[0])
++        {
++            int aw = (int)strlen(mn.items[i].accel) * UI_TRACK_CW;
++            ui_print_tracked(u8, boxx + boxw - aw - 8, baseline, mn.items[i].accel, UI_TRACK_CW);
++        }
++        else if (mn.items[i].shortcut)
 +        {
 +            char sc[2] = {mn.items[i].shortcut, 0};
 +            ui_print_tracked(u8, boxx + boxw - 22, baseline, sc, UI_TRACK_CW);
@@ -2150,7 +2264,7 @@ index f160606..d183f55 100644
  
      //
 diff --git a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
-index bade544..c502aeb 100644
+index bade544..da55b33 100644
 --- a/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 +++ b/micro-journal-rev-4-esp32/src/display/RLCD/WordProcessor/WordProcessor.cpp
 @@ -6,6 +6,9 @@
@@ -2665,8 +2779,7 @@ index bade544..c502aeb 100644
 +    // color switch below never lands inside a multi-byte sequence.
 +    int selStart = -1, selEnd = -1;
 +    if (editor.hasSelection())
-     {
--        char value = *(line + i);
++    {
 +        selStart = editor.selectionStart();
 +        selEnd = editor.selectionEnd();
 +    }
@@ -2695,7 +2808,8 @@ index bade544..c502aeb 100644
 +    bool inverse = false;
 +    int i = 0;
 +    while (i < length)
-+    {
+     {
+-        char value = *(line + i);
 +        char value = line[i];
          if (value == '\n')
 +        {
@@ -2847,7 +2961,7 @@ index bade544..c502aeb 100644
  }
  
  //
-@@ -478,22 +1021,272 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -478,22 +1021,316 @@ void WP_keyboard(int key, bool pressed, int index)
      // Every key stroke resets sleep timer
      last_sleep = millis();
  
@@ -2930,6 +3044,8 @@ index bade544..c502aeb 100644
      //
      JsonDocument &app = status();
  
+-    // Check if menu key is pressed
+-    if (key == MENU || key == 27) // or ESC key
 +    // ---- classic menu bar overlay -----------------------------------
 +    // double-tap the Fn/"Alt" key (the ones flanking GUI) opens the bar
 +    static unsigned long mb_alt_last = 0;
@@ -2985,38 +3101,81 @@ index bade544..c502aeb 100644
 +        return; // consume both press and release
 +    }
 +
-     // Check if menu key is pressed
-     if (key == MENU || key == 27) // or ESC key
++    // Esc: from an overlay (scratchpad / ask / grammar) return to the note;
++    // from a real note, step out to the home menu. The pull-down menu bar is a
++    // separate gesture now (double-tap Alt, the MENU key, or Ctrl+~).
++    if (key == 27)
      {
          if (!pressed)
          {
 -            // Save before transitioning to the menu
-+            // Save before leaving the current text
              Editor::getInstance().saveFile();
- 
--            //
--            app["screen"] = MENUSCREEN;
-+            // ESC from an overlay (scratchpad / ask screen) returns to the
-+            // file the writer was in, not to the menu
 +            if (overlay_prev_index >= 0)
 +            {
 +                int fileIndex = overlay_prev_index;
 +                overlay_prev_index = -1;
-+
 +                app["config"]["file_index"] = fileIndex;
 +                config_save();
-+
 +                Editor::getInstance().loadFile(format("/%d.txt", fileIndex));
-+
 +                _debug("WP_keyboard::Closing overlay, back to file %d\n", fileIndex);
 +            }
 +            else
 +            {
-+                // open the classic menu bar over the note; Esc again leaves
-+                // to the home menu, Shift+Esc drops back into the note
-+                menubar_open(true, app["config"]["file_index"].as<int>());
-+                _debug("WP_keyboard::Opening menu bar\n");
++                crypt_forget();
++                app["screen"] = MENUSCREEN;
++                _debug("WP_keyboard::Esc to home menu\n");
 +            }
++        }
++    }
+ 
+-            //
++    // MENU key or Ctrl+~ opens the classic menu bar over the note
++    else if (key == MENU || key == KEY_MENUBAR)
++    {
++        if (!pressed && overlay_prev_index < 0)
++        {
++            Editor::getInstance().saveFile();
++            menubar_open(true, app["config"]["file_index"].as<int>());
++            _debug("WP_keyboard::Opening menu bar\n");
++        }
++    }
++
++    // Ctrl+L / Ctrl+R / Ctrl+S act on the CURRENT note (0-9), matching the home
++    // footer: lock/unlock, rename (via the home dialog), and sync-this-note.
++    else if (key == KEY_LOCK)
++    {
++        int fi = app["config"]["file_index"].as<int>();
++        if (pressed && fi >= 0 && fi <= 9)
++        {
++            Editor::getInstance().saveFile();
++            WP_requestPasswordFor(fi);
++        }
++    }
++    else if (key == KEY_RENAME)
++    {
++        int fi = app["config"]["file_index"].as<int>();
++        if (pressed && fi >= 0 && fi <= 9)
++        {
++            Editor::getInstance().saveFile();
++            crypt_forget();
++            app["menu"]["pending_rename"] = fi + 1;
++            app["menu"]["from_note"] = false;
++            app["menu"]["pending"] = MENU_HOME;
+             app["screen"] = MENUSCREEN;
++        }
++    }
++    else if (key == KEY_SYNC)
++    {
++        int fi = app["config"]["file_index"].as<int>();
++        if (pressed && fi >= 0 && fi <= 9)
++        {
++            Editor::getInstance().saveFile();
++            crypt_forget();
++            app["sync"]["target"] = fi;
++            app["sync"]["all"] = false;
++            app["menu"]["from_note"] = false;
++            app["menu"]["pending"] = MENU_SYNC;
++            app["screen"] = MENUSCREEN;
 +        }
 +    }
  
@@ -3125,7 +3284,7 @@ index bade544..c502aeb 100644
          }
      }
  
-@@ -505,15 +1298,12 @@ void WP_keyboard(int key, bool pressed, int index)
+@@ -505,15 +1342,12 @@ void WP_keyboard(int key, bool pressed, int index)
              int fileIndex = key - 1000;
              _log("File Change Requested: %d\n", fileIndex);
  
@@ -3279,7 +3438,7 @@ index 23bb86b..4a6c647 100644
  // MENU button
  #define FN 28
 diff --git a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
-index d8832fa..ffa8a5f 100644
+index d8832fa..143af71 100644
 --- a/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 +++ b/micro-journal-rev-4-esp32/src/keyboard/Keypad/68/Keypad_68.cpp
 @@ -11,6 +11,9 @@
@@ -3358,7 +3517,7 @@ index d8832fa..ffa8a5f 100644
  
      // check if the layer key is pressed
      if (_fn_pressed)
-@@ -282,6 +299,100 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -282,6 +299,114 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      // value baked into the layer tables (hardcoded to the US layout)
      key = layers[_layer][e.bit.KEY];
  
@@ -3413,6 +3572,20 @@ index d8832fa..ffa8a5f 100644
 +        if (letter == 'n')
 +            return KEY_NEW_NOTE;
 +
++        // Contextual note actions (DOS/WordStar style), acting on the selected
++        // note on the home/menu screen or the current note in the editor.
++        // ^C clear reuses KEY_COPY above (copy in the editor, clear on home).
++        if (letter == 'l')
++            return KEY_LOCK;
++        if (letter == 'r')
++            return KEY_RENAME;
++        if (letter == 's')
++            return KEY_SYNC;
++
++        // Ctrl/GUI + ` / ~ opens the pull-down menu bar from anywhere
++        if (key == '`' || key == '~')
++            return KEY_MENUBAR;
++
 +        // Ctrl/GUI + Shift + arrows: upgrade the character/line select keys
 +        // (from the shift layer) to word / line selection
 +        if (key == KEY_SELECT_LEFT)
@@ -3459,7 +3632,7 @@ index d8832fa..ffa8a5f 100644
      // Korean maps by the CHARACTER the layer table produced, not by the
      // physical key: 'r' -> ㄱ, 'R' -> ㄲ, 'c' -> ㅊ ... so layouts
      // customized via keyboard.json keep working - the resolved character
-@@ -293,8 +404,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
+@@ -293,8 +418,10 @@ int keyboard_keypad_68_get_key(keypadEvent e)
      }
  
      // for other non-US layouts, re-map character keys through the locale
@@ -5138,7 +5311,7 @@ index 0000000..db4feda
 +bool crypt_protect(const char *path, const char *password);
 +bool crypt_unprotect(const char *path);
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
-index 45f7e4a..78f0b7c 100644
+index 45f7e4a..ff1cff2 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.cpp
 @@ -5,12 +5,17 @@
@@ -5573,7 +5746,7 @@ index 45f7e4a..78f0b7c 100644
  }
  
  // Handle Keyboard Input
-@@ -716,8 +945,12 @@ void Editor::keyboard(int key, bool pressed)
+@@ -716,8 +945,13 @@ void Editor::keyboard(int key, bool pressed)
  {
      // ignore non printable character
      // (1 is the "consumed" sentinel from the keyboard locale layer,
@@ -5584,11 +5757,12 @@ index 45f7e4a..78f0b7c 100644
 +    // don't implement them must not type them as characters)
 +    if (key == 0 || key == 1 || key == 27 || key == MENU ||
 +        key == KEY_SCRATCHPAD || key == KEY_ASK_CLAUDE || key == KEY_ASK_SEND ||
-+        key == KEY_GRAMMAR || key == KEY_REWRITE || key == KEY_NEW_NOTE)
++        key == KEY_GRAMMAR || key == KEY_REWRITE || key == KEY_NEW_NOTE ||
++        key == KEY_LOCK || key == KEY_RENAME || key == KEY_SYNC || key == KEY_MENUBAR)
          return;
  
      //
-@@ -750,11 +983,124 @@ void Editor::keyboard(int key, bool pressed)
+@@ -750,11 +984,124 @@ void Editor::keyboard(int key, bool pressed)
      // below is only for when the key is pressed
      if (pressed)
      {
@@ -5714,7 +5888,7 @@ index 45f7e4a..78f0b7c 100644
              // during Hangul composition backspace removes one jamo,
              // not the whole syllable: 간 -> 가 -> ㄱ -> (gone)
              if (composer.isComposing())
-@@ -798,7 +1144,13 @@ void Editor::keyboard(int key, bool pressed)
+@@ -798,7 +1145,13 @@ void Editor::keyboard(int key, bool pressed)
              // deleting forward ends any composition
              composer.reset();
  
@@ -5729,7 +5903,7 @@ index 45f7e4a..78f0b7c 100644
              {
                  // if editing at the end of the line then remove word
                  if (cursorPos == getBufferSize())
-@@ -835,6 +1187,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -835,6 +1188,11 @@ void Editor::keyboard(int key, bool pressed)
              // syllable simply stays in the buffer as normal text
              composer.reset();
  
@@ -5741,7 +5915,7 @@ index 45f7e4a..78f0b7c 100644
              // arrow keys
              // 18 - Left, 19 - Right, 20 - Up, 21 - Down
              // 22 - Page Up, 23 - Page Down
-@@ -843,8 +1200,11 @@ void Editor::keyboard(int key, bool pressed)
+@@ -843,8 +1201,11 @@ void Editor::keyboard(int key, bool pressed)
              {
                  if (cursorPos == 0)
                  {
@@ -5755,7 +5929,7 @@ index 45f7e4a..78f0b7c 100644
                  }
                  else
                  {
-@@ -858,7 +1218,7 @@ void Editor::keyboard(int key, bool pressed)
+@@ -858,7 +1219,7 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorPos < getBufferSize())
                      // right - move over one whole character
                      cursorPos = nextCharStart(cursorPos);
@@ -5764,7 +5938,7 @@ index 45f7e4a..78f0b7c 100644
                      // already at the end of the buffer - load the next page
                      pageForward();
              }
-@@ -870,7 +1230,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -870,7 +1231,8 @@ void Editor::keyboard(int key, bool pressed)
                  if (cursorLine == 0)
                  {
                      // already at the top line - load the previous page
@@ -5774,7 +5948,7 @@ index 45f7e4a..78f0b7c 100644
                  }
                  else if (cursorLine > 0)
                  {
-@@ -942,7 +1303,8 @@ void Editor::keyboard(int key, bool pressed)
+@@ -942,7 +1304,8 @@ void Editor::keyboard(int key, bool pressed)
                      // already at the end of the buffer - load the next page
                      if (cursorPos == getBufferSize())
                      {
@@ -5784,7 +5958,7 @@ index 45f7e4a..78f0b7c 100644
                      }
                      else
                      {
-@@ -1025,11 +1387,110 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1025,11 +1388,110 @@ void Editor::keyboard(int key, bool pressed)
              }
          }
  
@@ -5895,7 +6069,7 @@ index 45f7e4a..78f0b7c 100644
              // add to the edit buffer new character
              // (a character can be up to 4 UTF-8 bytes, so flush a little
              // before the boundary so an insert never overruns it)
-@@ -1063,6 +1524,49 @@ void Editor::keyboard(int key, bool pressed)
+@@ -1063,6 +1525,49 @@ void Editor::keyboard(int key, bool pressed)
                  // any other character ends the composition
                  composer.reset();
  
@@ -5945,7 +6119,7 @@ index 45f7e4a..78f0b7c 100644
                  //
                  addChar(key);
              }
-@@ -1284,6 +1788,7 @@ void Editor::addChar(int c)
+@@ -1284,6 +1789,7 @@ void Editor::addChar(int c)
          cursorPos += len;
          buffer[bufferSize + len] = '\0';
  
@@ -5953,7 +6127,7 @@ index 45f7e4a..78f0b7c 100644
          _debug("FileBuffer::addChar::cursorPos %d %d (%d bytes)\n", cursorPos, c, len);
      }
  }
-@@ -1311,6 +1816,7 @@ void Editor::removeLastChar()
+@@ -1311,6 +1817,7 @@ void Editor::removeLastChar()
          buffer[bufferSize - len] = 0;
          cursorPos = start;
  
@@ -5961,7 +6135,7 @@ index 45f7e4a..78f0b7c 100644
          bufferSize = getBufferSize();
          _debug("FileBuffer::removeLastChar After cusorPos: %d bufferSize: %d\n", cursorPos, bufferSize);
      }
-@@ -1333,6 +1839,7 @@ void Editor::removeCharAtCursor()
+@@ -1333,6 +1840,7 @@ void Editor::removeCharAtCursor()
  
          // Null terminate the buffer
          buffer[bufferSize - len] = '\0';
@@ -5969,7 +6143,7 @@ index 45f7e4a..78f0b7c 100644
      }
  }
  
-@@ -1348,6 +1855,167 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
+@@ -1348,6 +1856,167 @@ void Editor::replaceCharBeforeCursor(uint32_t codepoint)
      charReplaced = true;
  }
  
@@ -6137,7 +6311,7 @@ index 45f7e4a..78f0b7c 100644
  void Editor::removeLastWord()
  {
      int length = getBufferSize();
-@@ -1378,6 +2046,224 @@ void Editor::removeLastWord()
+@@ -1378,6 +2047,224 @@ void Editor::removeLastWord()
  
      cursorPos = getBufferSize();
  
@@ -6364,10 +6538,10 @@ index 45f7e4a..78f0b7c 100644
 +    updateScreen();
 +}
 diff --git a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-index 15a36fe..a84cffe 100644
+index 15a36fe..10bcd2c 100644
 --- a/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
 +++ b/micro-journal-rev-4-esp32/src/service/Editor/Editor.h
-@@ -16,6 +16,84 @@
+@@ -16,6 +16,94 @@
  #define BUFFER_SIZE 8000
  #endif
  
@@ -6443,6 +6617,16 @@ index 15a36fe..a84cffe 100644
 +// by the display layer like the other overlay keys)
 +#define KEY_NEW_NOTE 2130
 +
++// Contextual note actions on Ctrl/GUI + letter (DOS/WordStar style), acting on
++// the selected note on the home/menu screen or the current note in the editor:
++//   ^L lock/unlock, ^R rename, ^S sync. (^C clear reuses KEY_COPY - there is no
++//   text to copy on the home screen, so it means clear there.)
++// KEY_MENUBAR opens the pull-down menu bar (Ctrl/GUI + ` / ~).
++#define KEY_LOCK 2131
++#define KEY_RENAME 2132
++#define KEY_SYNC 2133
++#define KEY_MENUBAR 2134
++
 +// Keypad-internal modifier codes, like SHIFT (14) and ALT/Fn (17). They are
 +// consumed by the keypad layer (Ctrl/GUI + A/C/X/V become the clipboard
 +// codes above) and never reach the editor.
@@ -6452,7 +6636,7 @@ index 15a36fe..a84cffe 100644
  //
  class Editor
  {
-@@ -117,6 +195,11 @@ public:
+@@ -117,6 +205,11 @@ public:
      void pageForward();
      void advanceWindow();
  
@@ -6464,7 +6648,7 @@ index 15a36fe..a84cffe 100644
      //
      bool savingInProgress = false;
  
-@@ -138,18 +221,75 @@ public:
+@@ -138,18 +231,75 @@ public:
      void removeLastChar();
      void removeCharAtCursor();
      void removeLastWord();
@@ -6540,7 +6724,7 @@ index 15a36fe..a84cffe 100644
      //
      void updateScreen();
  
-@@ -170,4 +310,39 @@ public:
+@@ -170,4 +320,39 @@ public:
  private:
      // Private constructor to prevent instantiation
      Editor() {}
@@ -6635,7 +6819,7 @@ index 0000000..10f1fb1
 +String note_name(int slot);
 +void note_name_set(int slot, const String &name);
 diff --git a/micro-journal-rev-4-esp32/src/service/Sync/Sync.cpp b/micro-journal-rev-4-esp32/src/service/Sync/Sync.cpp
-index f3f53bc..8e06d3f 100644
+index f3f53bc..39ff02a 100644
 --- a/micro-journal-rev-4-esp32/src/service/Sync/Sync.cpp
 +++ b/micro-journal-rev-4-esp32/src/service/Sync/Sync.cpp
 @@ -2,10 +2,88 @@
@@ -6737,37 +6921,276 @@ index f3f53bc..8e06d3f 100644
          return true;
      }
      else
-@@ -320,12 +401,28 @@ void sync_send()
-     String url = app["config"]["sync"]["url"].as<String>();
-     if (!url.isEmpty() && url != "null")
+@@ -233,64 +314,26 @@ bool sync_connect_wifi(JsonDocument &app, const char *ssid, const char *password
+     }
+ }
+ 
+-void sync_send()
++// send one note file to the drive: base64-encode it, then POST it, titled after
++// the note (the bundled Apps Script reads the ?name= parameter). Returns true on
++// a successful POST. Locked notes are sent as-is (ciphertext).
++static bool sync_send_file(const String &path, const String &baseUrl)
+ {
+-    _log("[sync_send] Sync Send\n");
+-
+-    //
+-    JsonDocument &app = status();
+-
+-    // preparing the file
+-    app["sync_message"] = "Preparing the file ... ";
+-    app["clear"] = true;
+-
+-    // Get the input file
+-    File inputFile = gfs()->open(Editor::getInstance().fileName.c_str(), "r");
++    File inputFile = gfs()->open(path.c_str(), "r");
+     if (!inputFile)
+-    {
+-        app["sync_error"] = "Error opening input file!\n";
+-        app["sync_state"] = SYNC_ERROR;
+-        app["clear"] = true;
+-
+-        _log(app["sync_error"]);
+-
+-        sync_stop();
+-        return;
+-    }
+-
+-    // Check file size
++        return false;
+     if (inputFile.size() == 0)
      {
-+        // title the Drive file after the note (the bundled Apps Script,
-+        // install/google/sync.js, reads this ?name= parameter); harmless if
-+        // the deployed script hasn't been updated - it just ignores it
-+        String dispName = sync_display_name(Editor::getInstance().fileName);
-+        if (!dispName.isEmpty())
-+        {
-+            url += (url.indexOf('?') >= 0 ? "&" : "?");
-+            url += "name=" + sync_urlencode(dispName);
-+        }
-+
-         _log("Requesting sync ... \n");
-         _log("%s\n", url.c_str());
+-        app["sync_error"] = "File is empty. Sync stopped.\n";
+-        app["sync_state"] = SYNC_ERROR;
+-        app["clear"] = true;
+-
+-        _log(app["sync_error"]);
+-
+-        sync_stop();
+-        return;
++        inputFile.close();
++        return false;
+     }
  
+-    // convert to BASE64 file
+-    String base64Filename = Editor::getInstance().fileName + ".base64";
++    String base64Filename = path + ".base64";
+     File outputFile = gfs()->open(base64Filename.c_str(), "w");
+     if (!outputFile)
+     {
+-        //
+         inputFile.close();
+-        delay(100);
+-
+-        //
+-        sync_stop();
+-
+-        //
+-        app["sync_error"] = "Error opening base64 file!\n";
+-        app["sync_state"] = SYNC_ERROR;
+-        app["clear"] = true;
+-
+-        _log(app["sync_error"]);
+-
+-        return;
++        return false;
+     }
+ 
+     // Convert to BASE64
+@@ -300,80 +343,140 @@ void sync_send()
+     {
+         size_t bytesRead = inputFile.read(buffer, bufferSize);
+         if (bytesRead > 0)
+-        {
+-            // Encode buffer to base64 and write to output file
+-            String txtBase64 = base64::encode(buffer, bytesRead);
+-            outputFile.print(txtBase64);
+-        }
++            outputFile.print(base64::encode(buffer, bytesRead));
+     }
+-    //
+     inputFile.close();
+-    delay(100);
++    delay(50);
+     outputFile.close();
+-    delay(100);
+-
+-    //
+-    app["sync_message"] = "Sending file to drive ... ";
+-    app["clear"] = true;
++    delay(50);
+ 
+-    // send file to google drive
+-    String url = app["config"]["sync"]["url"].as<String>();
+-    if (!url.isEmpty() && url != "null")
++    // title the Drive file after the note (see install/google/sync.js)
++    String url = baseUrl;
++    String dispName = sync_display_name(path);
++    if (!dispName.isEmpty())
+     {
+-        _log("Requesting sync ... \n");
+-        _log("%s\n", url.c_str());
+-
 -        // prepare http client
-+        // prepare http client - the server certificate is verified
-+        // against the bundled root CA store (the redirect target,
-+        // script.googleusercontent.com, chains to the same roots)
-+        WiFiClientSecure client;
-+        client.setCACert(ROOT_CA_BUNDLE);
-+        client.setHandshakeTimeout(15);
-+
-         HTTPClient http;
+-        HTTPClient http;
 -        http.begin(url);
-+        http.begin(client, url);
-         http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+-        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+-
+-        // Read file in chunks and send via POST request
+-        File file = gfs()->open(base64Filename.c_str(), "r");
+-        if (!file)
+-        {
+-            app["sync_error"] = "Failed to open file" + base64Filename;
+-            app["sync_state"] = SYNC_ERROR;
+-            app["clear"] = true;
++        url += (url.indexOf('?') >= 0 ? "&" : "?");
++        url += "name=" + sync_urlencode(dispName);
++    }
++    _log("Sync POST: %s\n", url.c_str());
  
-         // Read file in chunks and send via POST request
+-            http.end();
++    // the server certificate is verified against the bundled root CA store
++    // (the redirect target, script.googleusercontent.com, chains to it too)
++    WiFiClientSecure client;
++    client.setCACert(ROOT_CA_BUNDLE);
++    client.setHandshakeTimeout(15);
+ 
+-            sync_stop();
++    HTTPClient http;
++    http.begin(client, url);
++    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+ 
+-            return;
+-        }
++    File file = gfs()->open(base64Filename.c_str(), "r");
++    if (!file)
++    {
++        http.end();
++        return false;
++    }
++    int code = http.sendRequest("POST", &file, file.size());
++    http.end();
++    file.close();
++    delay(50);
+ 
+-        //
+-        _log("Sending file: %s\n", base64Filename.c_str());
+-        _log("File size: %d bytes\n", file.size());
+-        http.sendRequest("POST", &file, file.size());
+-        _log("File sent successfully\n");
++    _log("Sync POST result: %d\n", code);
++    return code > 0 && code < 400;
++}
+ 
+-        // close http connection
+-        http.end();
++// Sync one note (app["sync"]["target"], else the current file), or every
++// non-empty note plus the scratchpad when app["sync"]["all"] is set. One WiFi
++// session, per-note progress, and a failed note does not abort the batch.
++void sync_send()
++{
++    _log("[sync_send] Sync Send\n");
+ 
+-        // Close file
+-        file.close();
+-        delay(100);
++    JsonDocument &app = status();
+ 
+-        //
++    String url = app["config"]["sync"]["url"].as<String>();
++    if (url.isEmpty() || url == "null")
++    {
++        app["sync_error"] = "SYNC URL NOT FOUND\n";
++        app["sync_state"] = SYNC_ERROR;
++        app["clear"] = true;
+         sync_stop();
++        return;
++    }
+ 
+-        //
+-        app["sync_state"] = SYNC_COMPLETED;
+-        app["clear"] = true;
+-        _log("Sync State: SYNC_COMPLETED\n");
++    // build the list of note slots to send
++    bool all = app["sync"]["all"].as<bool>();
++    int slots[11];
++    int nslots = 0;
++    if (all)
++    {
++        for (int i = 0; i <= 10; i++) // notes 0-9 plus the scratchpad (slot 10)
++            slots[nslots++] = i;
+     }
+     else
+     {
+-        //
+-        app["sync_error"] = "SYNC URL NOT FOUND\n";
++        int t = app["sync"]["target"].is<int>()
++                    ? app["sync"]["target"].as<int>()
++                    : app["config"]["file_index"].as<int>();
++        slots[nslots++] = t;
++    }
++
++    // count the slots that actually have content (for the "of N" display)
++    int total = 0;
++    for (int i = 0; i < nslots; i++)
++    {
++        File f = gfs()->open(format("/%d.txt", slots[i]).c_str(), "r");
++        bool ok = f && f.size() > 0;
++        if (f)
++            f.close();
++        if (ok)
++            total++;
++    }
++
++    if (total == 0)
++    {
++        app["sync_error"] = "Nothing to sync.\n";
+         app["sync_state"] = SYNC_ERROR;
+         app["clear"] = true;
++        sync_stop();
++        return;
++    }
+ 
+-        _log(app["sync_error"]);
++    int sent = 0, failed = 0, done = 0;
++    for (int i = 0; i < nslots; i++)
++    {
++        String path = format("/%d.txt", slots[i]);
++        File f = gfs()->open(path.c_str(), "r");
++        bool has = f && f.size() > 0;
++        if (f)
++            f.close();
++        if (!has)
++            continue;
++
++        done++;
++        String nm = sync_display_name(path);
++        app["sync_message"] = format("Syncing %d of %d: %s", done, total,
++                                     nm.isEmpty() ? "note" : nm.c_str());
++        app["clear"] = true;
+ 
+-        //
+-        sync_stop();
++        if (sync_send_file(path, url))
++            sent++;
++        else
++            failed++;
+     }
++
++    sync_stop();
++
++    if (failed == 0)
++    {
++        app["sync_message"] = format("Synced %d note%s.", sent, sent == 1 ? "" : "s");
++        app["sync_state"] = SYNC_COMPLETED;
++    }
++    else
++    {
++        app["sync_error"] = format("Synced %d, %d failed.\n", sent, failed);
++        app["sync_state"] = SYNC_ERROR;
++    }
++    app["clear"] = true;
++    _log("Sync done: %d sent, %d failed\n", sent, failed);
+ }
 diff --git a/micro-journal-rev-4-esp32/src/service/WordCounter/WordCounter.cpp b/micro-journal-rev-4-esp32/src/service/WordCounter/WordCounter.cpp
 index c2cb830..5bcc5f4 100644
 --- a/micro-journal-rev-4-esp32/src/service/WordCounter/WordCounter.cpp
