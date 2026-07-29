@@ -118,117 +118,161 @@
 </style>
 
 <div class="wrap">
-<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Illustrated software guide for the RighterDeck writerdeck, walking through each screen with mockups.</h2>
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Illustrated software guide for the MacroJournal writerdeck, walking through each screen with mockups.</h2>
 
 <header class="hero">
   <p class="eyebrow">Software guide</p>
-  <h1>RighterDeck</h1>
-  <p class="lede">A distraction-free writing deck. Ten notes, a scratchpad, an
-  LLM assistant, real file encryption — all on a 400&times;300 monochrome
-  screen, all from the keyboard. This guide walks through every screen.</p>
+  <h1>MacroJournal</h1>
+  <p class="lede">A distraction-free writing deck with a classic-Mac shell. Ten
+  notes, a scratchpad, an LLM assistant, real file encryption — all on a
+  400&times;300 monochrome screen, all from the keyboard. This guide walks
+  through every screen.</p>
 </header>
 
 <ul class="toc">
   <li><a href="#start">1 · Getting started</a></li>
   <li><a href="#home">2 · The home screen</a></li>
-  <li><a href="#files">3 · Finding a file</a></li>
+  <li><a href="#menubar">3 · The menu bar</a></li>
   <li><a href="#write">4 · Writing</a></li>
   <li><a href="#markdown">5 · Markdown styling</a></li>
   <li><a href="#scratch">6 · The scratchpad</a></li>
   <li><a href="#gz">7 · Grammana Z</a></li>
   <li><a href="#grammar">8 · Grammar check</a></li>
-  <li><a href="#lock">9 · Locking a file</a></li>
-  <li><a href="#dark">10 · Dark mode &amp; name</a></li>
-  <li><a href="#cheat">11 · Shortcut cheat sheet</a></li>
+  <li><a href="#lock">9 · Locking a note</a></li>
+  <li><a href="#dark">10 · Dark mode &amp; names</a></li>
+  <li><a href="#about">11 · About &amp; storage</a></li>
+  <li><a href="#cheat">12 · Shortcut cheat sheet</a></li>
 </ul>
 
 <h2 id="start"><span class="num">01</span>Getting started</h2>
 <p>Flash <code>firmware_rev_8.bin</code> at address <strong>0x0</strong> using the
 web flasher at <a href="https://www.espboards.dev/tools/program/">espboards.dev</a>
 (Chrome or Edge, upper USB-C port). It takes about a minute and doesn't erase
-your notes. Then press the menu key to open the home screen below.</p>
-<p>For the LLM features, enter Drive Mode (<span class="key">U</span> on the menu),
-copy <code>grammana_z.json</code> with your API key onto the drive, and set up
-WiFi (<span class="key">W</span>). Everything else works out of the box.</p>
+your notes. The deck boots into the editor; press <span class="key">Esc</span> to
+bring up the menu bar and home screen below.</p>
+<p>For the LLM features, open <strong>Device&nbsp;▸&nbsp;Drive&nbsp;mode</strong>,
+copy <code>grammana_z.json</code> with your API key onto the drive, and set up WiFi
+from <strong>Setup&nbsp;▸&nbsp;WiFi</strong>. Everything else works out of the box.</p>
 
 <h2 id="home"><span class="num">02</span>The home screen</h2>
-<p>The menu is two panels. On the <strong>left</strong> are device commands; on the
-<strong>right</strong>, your files. Arrow keys move a highlight in the active pane and
-<span class="key">Enter</span> runs it — or just press the bracketed letter. The
-device name (<em>RighterDeck</em> by default) sits in the toolbar.</p>
+<p>The home screen is a little Macintosh desktop. Across the top is a pull-down
+<strong>menu bar</strong>; below it, three quick-launch <strong>tool tiles</strong>
+and a <strong>notes window</strong> listing your ten notes. Arrow keys move the
+highlight, <span class="key">Enter</span> opens it, and the action bar at the bottom
+shows the keys that act on the highlighted note.</p>
 
 <figure class="screen"><div class="bezel">
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
 <rect width="400" height="300" fill="#cbd0c5"/>
-<text x="200" y="18" font-size="13" fill="#1a1c19" text-anchor="middle">RighterDeck</text>
+<g font-size="13" fill="#1a1c19">
+<text x="18" y="18">File</text><text x="78" y="18">Notes</text><text x="150" y="18">Tools</text><text x="222" y="18">Setup</text><text x="294" y="18">Device</text>
+</g>
 <line x1="0" y1="25" x2="400" y2="25" stroke="#8b9086"/>
-<line x1="184" y1="25" x2="184" y2="300" stroke="#8b9086"/>
-<rect x="0" y="29" width="182" height="24" fill="#1a1c19"/><text x="6" y="46" font-size="13" fill="#e9ece2">MENU</text>
-<rect x="186" y="29" width="211" height="24" fill="#1a1c19"/><text x="192" y="46" font-size="13" fill="#e9ece2">CHOOSE A FILE [F]</text>
-<g font-size="13" fill="#1a1c19">
-<text x="4" y="77">[I] DARK: OFF</text><text x="4" y="101">[L] LANGUAGE</text>
-<text x="4" y="125">[N] DEVICE NAME</text><text x="4" y="149">[T] BLE KEYS</text>
-<text x="4" y="173">[U] DRIVE</text><text x="4" y="197">[W] WIFI</text>
-<text x="4" y="229">[B] BACK</text>
+
+<!-- tool tiles (with soft drop shadow for the floating look) -->
+<g>
+<rect x="19" y="40" width="118" height="48" fill="#a9aea3"/><rect x="16" y="37" width="118" height="48" fill="#cbd0c5" stroke="#1a1c19"/>
+<rect x="145" y="40" width="118" height="48" fill="#a9aea3"/><rect x="142" y="37" width="118" height="48" fill="#cbd0c5" stroke="#1a1c19"/>
+<rect x="271" y="40" width="116" height="48" fill="#a9aea3"/><rect x="268" y="37" width="116" height="48" fill="#cbd0c5" stroke="#1a1c19"/>
 </g>
-<g font-size="13" fill="#1a1c19">
-<text x="188" y="77"> [S] SCRATCHPAD</text><text x="188" y="101"> [G] GRAMMANA Z</text><text x="188" y="125"> [/] LAST NOTE[2]</text>
+<!-- tile icons -->
+<g fill="none" stroke="#1a1c19" stroke-width="1.4">
+<rect x="69" y="47" width="12" height="15"/><line x1="72" y1="51" x2="78" y2="51"/><line x1="72" y1="54" x2="78" y2="54"/><line x1="72" y1="57" x2="76" y2="57"/>
+<rect x="194" y="47" width="13" height="15"/><line x1="197" y1="51" x2="204" y2="51"/><line x1="204" y1="51" x2="197" y2="58"/><line x1="197" y1="58" x2="204" y2="58"/>
+<path d="M320 47 h8 l4 4 v11 h-12 z M328 47 v4 h4"/>
 </g>
-<line x1="186" y1="137" x2="396" y2="137" stroke="#8b9086"/>
-<g font-size="13" fill="#1a1c19">
-<text x="188" y="161">&gt;[0] Morning pages</text><text x="188" y="185"> [1] LOCKED</text>
-<text x="188" y="209"> [2] Novel ch. 3</text><text x="188" y="233"> [3] Letter home</text>
-<text x="188" y="257"> [4] -</text>
+<g font-size="12" fill="#1a1c19" text-anchor="middle">
+<text x="75" y="80">Scratch</text><text x="201" y="80">Gramma</text><text x="326" y="80">Last</text>
 </g>
-<path d="M286 283 l6 6 l6 -6" fill="none" stroke="#1a1c19" stroke-width="2"/>
+
+<!-- notes window (drop shadow + striped title bar) -->
+<rect x="20" y="97" width="368" height="153" fill="#a9aea3"/>
+<rect x="16" y="93" width="368" height="153" fill="#cbd0c5" stroke="#1a1c19"/>
+<g stroke="#1a1c19" stroke-width="1">
+<line x1="19" y1="98" x2="381" y2="98"/><line x1="19" y1="101" x2="381" y2="101"/><line x1="19" y1="104" x2="381" y2="104"/><line x1="19" y1="107" x2="381" y2="107"/>
+</g>
+<rect x="22" y="97" width="12" height="12" fill="#cbd0c5" stroke="#1a1c19"/>
+<rect x="150" y="95" width="100" height="17" fill="#cbd0c5"/>
+<rect x="156" y="98" width="11" height="11" fill="none" stroke="#1a1c19"/><rect x="159" y="101" width="5" height="5" fill="#1a1c19"/>
+<text x="173" y="108" font-size="12" fill="#1a1c19">MacroJournal</text>
+<line x1="16" y1="115" x2="384" y2="115" stroke="#1a1c19"/>
+
+<!-- selected first row -->
+<rect x="19" y="120" width="341" height="19" fill="#1a1c19"/>
+<text x="26" y="134" font-size="13" fill="#e9ece2">[0] Morning pages</text>
+<g font-size="13" fill="#1a1c19">
+<text x="26" y="155">[1] LOCKED</text><text x="26" y="176">[2] Novel ch. 3</text>
+<text x="26" y="197">[3] Letter home</text><text x="26" y="218">[4] Groceries</text>
+<text x="26" y="239">[5] -</text>
+</g>
+<!-- scroll bar -->
+<rect x="365" y="117" width="14" height="126" fill="none" stroke="#1a1c19"/>
+<rect x="367" y="119" width="10" height="42" fill="#cbd0c5" stroke="#1a1c19"/>
+
+<!-- action footer -->
+<rect x="20" y="257" width="368" height="34" fill="#a9aea3"/>
+<rect x="16" y="253" width="368" height="34" fill="#cbd0c5" stroke="#1a1c19"/>
+<g font-size="13" fill="#1a1c19"><text x="30" y="275">C</text><text x="152" y="275">P</text><text x="260" y="275">R</text></g>
+<rect x="48" y="258" width="80" height="20" fill="#1a1c19"/><text x="54" y="275" font-size="13" fill="#e9ece2">CLEAR</text>
+<rect x="170" y="258" width="66" height="20" fill="#1a1c19"/><text x="176" y="275" font-size="13" fill="#e9ece2">LOCK</text>
+<rect x="278" y="258" width="94" height="20" fill="#1a1c19"/><text x="284" y="275" font-size="13" fill="#e9ece2">RENAME</text>
 </svg>
-</div><figcaption>The home screen — commands left, files right</figcaption></figure>
+</div><figcaption>The home screen — menu bar, tool tiles, notes window, and the action bar</figcaption></figure>
 
-<p>The file list starts with three quick tools — <strong>Scratchpad</strong>,
-<strong>Grammana&nbsp;Z</strong>, and <strong>Last Note</strong> (jumps to the note you
-edited most recently) — then a separator, then your ten notes. Each note shows its
-first line as a title; empty ones show <code>-</code>, locked ones show
-<code>LOCKED</code>, and <code>&gt;</code> marks whatever's open. A down-chevron means
-there are more notes below.</p>
+<p>Each note row shows its <strong>name</strong> (if you've set one) or its first line
+as a title; empty slots show <code>-</code> and locked notes show <code>LOCKED</code>.
+Highlight a note and press <span class="key">R</span> to rename it,
+<span class="key">P</span> to lock it, or <span class="key">C</span> to clear it — the
+same three keys the bottom bar advertises. Press a number
+<span class="key">0</span>–<span class="key">9</span> to jump straight to a note, or
+<span class="key">N</span> (or <span class="key">Ctrl</span>+<span class="key">N</span>
+from anywhere) to start a new one.</p>
 
-<h2 id="files"><span class="num">03</span>Finding a file</h2>
-<p>Press <span class="key">F</span> to navigate. A row highlights in inverse video,
-and the left panel changes from commands to the <strong>actions</strong> for that row.
-Arrows move the highlight (the list scrolls); the highlight is sticky, so it stays
-where you left it when you come back.</p>
+<h2 id="menubar"><span class="num">03</span>The menu bar</h2>
+<p>Open the pull-down menu bar with <span class="key">Esc</span> or the menu key — or,
+inside a note, by double-tapping <span class="key">Alt</span>. Move between menus with
+<span class="key">&larr;/&rarr;</span>, within one with <span class="key">&uarr;/&darr;</span>,
+and run an item with <span class="key">Enter</span>. Each item lists its shortcut
+letter on the right, so you can also just press it.</p>
 
 <figure class="screen"><div class="bezel">
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
 <rect width="400" height="300" fill="#cbd0c5"/>
-<text x="200" y="18" font-size="13" fill="#1a1c19" text-anchor="middle">RighterDeck</text>
-<line x1="0" y1="25" x2="400" y2="25" stroke="#8b9086"/>
-<line x1="184" y1="25" x2="184" y2="300" stroke="#8b9086"/>
-<rect x="0" y="29" width="182" height="24" fill="#1a1c19"/><text x="6" y="46" font-size="13" fill="#e9ece2">ACTIONS</text>
-<rect x="186" y="29" width="211" height="24" fill="#1a1c19"/><text x="192" y="46" font-size="13" fill="#e9ece2">CHOOSE A FILE [F]</text>
-<g font-size="13" fill="#1a1c19">
-<text x="4" y="80">ARROWS  MOVE</text><text x="4" y="106">[ENTER] OPEN</text>
-<text x="4" y="132">[D] CLEAR</text><text x="4" y="158">[P] PASSWORD</text>
-<text x="4" y="184">[F] EXIT</text>
+<!-- faint home behind -->
+<g font-size="13" fill="#9aa094">
+<text x="26" y="150">[1] LOCKED</text><text x="26" y="171">[2] Novel ch. 3</text><text x="26" y="192">[3] Letter home</text>
 </g>
-<g font-size="13" fill="#1a1c19">
-<text x="188" y="80"> [S] SCRATCHPAD</text><text x="188" y="104"> [G] GRAMMANA Z</text><text x="188" y="128"> [/] LAST NOTE[2]</text>
-</g>
-<line x1="186" y1="140" x2="396" y2="140" stroke="#8b9086"/>
-<g font-size="13" fill="#1a1c19">
-<text x="188" y="166"> [0] Morning pages</text><text x="188" y="190"> [1] LOCKED</text>
-</g>
-<rect x="184" y="197" width="213" height="24" fill="#1a1c19"/>
-<text x="188" y="214" font-size="13" fill="#e9ece2">&gt;[2] Novel ch. 3</text>
-<g font-size="13" fill="#1a1c19">
-<text x="188" y="240"> [3] Letter home</text><text x="188" y="264"> [4] -</text>
+<!-- menu bar with File open -->
+<rect x="15" y="0" width="42" height="24" fill="#1a1c19"/>
+<g font-size="13"><text x="18" y="18" fill="#e9ece2">File</text>
+<text x="78" y="18" fill="#1a1c19">Notes</text><text x="150" y="18" fill="#1a1c19">Tools</text><text x="222" y="18" fill="#1a1c19">Setup</text><text x="294" y="18" fill="#1a1c19">Device</text></g>
+<line x1="0" y1="25" x2="400" y2="25" stroke="#1a1c19"/>
+<!-- dropdown -->
+<rect x="15" y="25" width="235" height="116" fill="#cbd0c5" stroke="#1a1c19"/>
+<rect x="17" y="27" width="231" height="26" fill="#1a1c19"/>
+<g font-size="13">
+<text x="26" y="45" fill="#e9ece2">New note</text><text x="228" y="45" fill="#e9ece2">N</text>
+<text x="26" y="71" fill="#1a1c19">Rename</text><text x="228" y="71" fill="#1a1c19">R</text>
+<text x="26" y="97" fill="#1a1c19">Lock / Unlock</text><text x="228" y="97" fill="#1a1c19">P</text>
+<text x="26" y="123" fill="#1a1c19">Clear</text><text x="228" y="123" fill="#1a1c19">C</text>
 </g>
 </svg>
-</div><figcaption>File navigation — the highlighted row (inverse) is the one actions apply to</figcaption></figure>
+</div><figcaption>The File menu open, with New note highlighted; Rename / Lock / Clear act on the selected note</figcaption></figure>
 
-<p><span class="key">Enter</span> opens the highlighted item. For notes,
-<span class="key">D</span> clears it and <span class="key">P</span> sets or removes a
-password — the three tools only offer <strong>Open</strong>. <span class="key">F</span>
-or <span class="key">Esc</span> leaves navigation.</p>
+<table>
+<thead><tr><th>Menu</th><th>What's inside</th></tr></thead>
+<tbody>
+<tr><td>File</td><td>New note; Rename, Lock / Unlock, Clear (for the selected note)</td></tr>
+<tr><td>Notes</td><td>Every non-empty note, by name — jump straight to one</td></tr>
+<tr><td>Tools</td><td>Grammana Z, Scratchpad</td></tr>
+<tr><td>Setup</td><td>WiFi, Language, BLE keyboard, Dark mode, Sync</td></tr>
+<tr><td>Device</td><td>About, Device name, Storage, Drive mode, Restart</td></tr>
+</tbody>
+</table>
+
+<p>From an open menu, <span class="key">Esc</span> leaves the bar and
+<span class="key">Shift</span>+<span class="key">Esc</span> (in a note) closes it and
+drops the cursor right back where it was.</p>
 
 <h2 id="write"><span class="num">04</span>Writing</h2>
 <p>The editor is the writing surface. It saves automatically; the status bar shows the
@@ -295,8 +339,9 @@ panel can't slant letters.</p>
 
 <h2 id="scratch"><span class="num">06</span>The scratchpad</h2>
 <p>Press <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">S</span>
-anywhere to open the scratchpad — an always-there note for lists and stray thoughts.
-<span class="key">Esc</span> returns you to whatever you were writing.</p>
+anywhere — or tap the <strong>Scratch</strong> tile — to open the scratchpad, an
+always-there note for lists and stray thoughts. <span class="key">Esc</span> returns
+you to whatever you were writing.</p>
 <p>But if you have <strong>text selected</strong>, that same shortcut instead
 <em>sends the selection to the scratchpad</em> without leaving your note — a quick way
 to stash a line while you write. A <code>SENT TO SCRATCH</code> flash confirms it.</p>
@@ -321,8 +366,8 @@ to stash a line while you write. A <code>SENT TO SCRATCH</code> flash confirms i
 
 <h2 id="gz"><span class="num">07</span>Grammana Z</h2>
 <p>Grammana Z is an on-device assistant, powered by your choice of Anthropic, OpenAI,
-or Gemini. Open it from the file list, with <span class="key">G</span>, or with
-<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">C</span>.
+or Gemini. Open it from the <strong>Gramma</strong> tile, with <span class="key">G</span>,
+or with <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">C</span>.
 Type a question and press <span class="key">Shift</span>+<span class="key">Enter</span>
 to send — you can keep typing while it thinks.</p>
 
@@ -371,11 +416,12 @@ never touched.</p>
 </svg>
 </div><figcaption>A grammar report — copyable, and your original stays put</figcaption></figure>
 
-<h2 id="lock"><span class="num">09</span>Locking a file</h2>
-<p>In file navigation, highlight a note and press <span class="key">P</span> to set a
-password. The note is re-written as real <strong>AES-256 ciphertext</strong> — plaintext
-never touches the disk again, so Drive Mode and sync only ever see scrambled bytes.
-Opening it later asks for the password.</p>
+<h2 id="lock"><span class="num">09</span>Locking a note</h2>
+<p>Highlight a note on the home screen and press <span class="key">P</span> (or
+<strong>File&nbsp;▸&nbsp;Lock&nbsp;/&nbsp;Unlock</strong>) to set a password. The note
+is re-written as real <strong>AES-256 ciphertext</strong> — plaintext never touches
+the disk again, so Drive Mode and sync only ever see scrambled bytes. Opening it later
+asks for the password.</p>
 
 <figure class="screen"><div class="bezel">
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
@@ -399,10 +445,10 @@ Opening it later asks for the password.</p>
   next time.
 </div>
 
-<h2 id="dark"><span class="num">10</span>Dark mode &amp; naming</h2>
-<p><span class="key">I</span> on the menu flips the whole panel to white-on-black —
-handy at night, and it sticks across reboots. Everything renders inverted, including
-selection and markdown.</p>
+<h2 id="dark"><span class="num">10</span>Dark mode &amp; names</h2>
+<p><span class="key">I</span> on the home screen (or <strong>Setup&nbsp;▸&nbsp;Dark</strong>)
+flips the whole panel to white-on-black — handy at night, and it sticks across reboots.
+Everything renders inverted, including selection and markdown.</p>
 
 <figure class="screen"><div class="bezel">
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
@@ -418,12 +464,81 @@ selection and markdown.</p>
 </svg>
 </div><figcaption>Dark mode — hardware panel inversion</figcaption></figure>
 
-<p>To rename the device, press <span class="key">N</span> on the menu and type a new
-name into the header bar; <span class="key">Enter</span> saves it as the toolbar title
-and drops you back into the editor. It's yours — call it whatever your writing deck
-should be called.</p>
+<p><strong>Naming things.</strong> Give a note a real name with
+<span class="key">R</span> (or <strong>File&nbsp;▸&nbsp;Rename</strong>): type into the
+dialog, <span class="key">Enter</span> saves, and the name shows on the home screen, in
+the Notes menu, and on the synced file. To rename the whole device, open
+<strong>Device&nbsp;▸&nbsp;Device&nbsp;name</strong> — the name you set shows on the
+home window's title bar. Both persist across reboots.</p>
 
-<h2 id="cheat"><span class="num">11</span>Shortcut cheat sheet</h2>
+<h2 id="about"><span class="num">11</span>About &amp; storage</h2>
+<p>The <strong>Device</strong> menu has two info screens. <strong>About</strong> shows
+the classic Happy Mac with your device name and the firmware version;
+<strong>Storage</strong> is a Get-Info box with a usage gauge and the real free space
+on the deck. <span class="key">Esc</span> returns home from either.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<!-- happy mac -->
+<g transform="translate(34,60)">
+<rect x="0" y="0" width="84" height="104" rx="8" fill="none" stroke="#1a1c19" stroke-width="3"/>
+<rect x="14" y="14" width="56" height="46" rx="2" fill="none" stroke="#1a1c19" stroke-width="2"/>
+<rect x="28" y="30" width="6" height="8" fill="#1a1c19"/><rect x="50" y="30" width="6" height="8" fill="#1a1c19"/>
+<path d="M26 44 q16 12 32 0" fill="none" stroke="#1a1c19" stroke-width="3"/>
+<rect x="20" y="72" width="44" height="5" rx="2" fill="#1a1c19"/>
+<rect x="12" y="86" width="60" height="6" rx="2" fill="#1a1c19"/>
+</g>
+<g fill="#1a1c19">
+<text x="140" y="92" font-size="18">MacroJournal</text>
+<text x="140" y="120" font-size="14">Writerdeck firmware</text>
+<text x="140" y="146" font-size="15">Version 2.0.010</text>
+</g>
+<line x1="34" y1="176" x2="380" y2="176" stroke="#1a1c19"/>
+<g font-size="14" fill="#1a1c19">
+<text x="34" y="202">Built on Micro Journal Rev 8</text>
+<text x="34" y="226">by unkyulee</text>
+</g>
+<line x1="0" y1="256" x2="400" y2="256" stroke="#8b9086"/>
+<text x="200" y="282" font-size="13" fill="#1a1c19" text-anchor="middle">Press ESC to exit</text>
+</svg>
+</div><figcaption>About — the Happy Mac, your device name, and the firmware version</figcaption></figure>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<rect x="0" y="0" width="400" height="300" fill="#b7bcb1" fill-opacity="0.4"/>
+<!-- get-info box -->
+<rect x="46" y="48" width="308" height="204" fill="#cbd0c5" stroke="#1a1c19"/>
+<g stroke="#1a1c19" stroke-width="1">
+<line x1="49" y1="53" x2="351" y2="53"/><line x1="49" y1="56" x2="351" y2="56"/><line x1="49" y1="59" x2="351" y2="59"/><line x1="49" y1="62" x2="351" y2="62"/>
+</g>
+<rect x="164" y="51" width="72" height="16" fill="#cbd0c5"/>
+<text x="200" y="64" font-size="13" fill="#1a1c19" text-anchor="middle">Storage</text>
+<line x1="46" y1="70" x2="354" y2="70" stroke="#1a1c19"/>
+<!-- disk icon + label -->
+<rect x="66" y="84" width="32" height="22" fill="none" stroke="#1a1c19"/><line x1="68" y1="99" x2="96" y2="99" stroke="#1a1c19"/><rect x="90" y="102" width="4" height="2" fill="#1a1c19"/>
+<text x="112" y="102" font-size="14" fill="#1a1c19">Internal disk</text>
+<!-- gauge -->
+<rect x="66" y="118" width="268" height="20" fill="none" stroke="#1a1c19"/>
+<rect x="68" y="120" width="52" height="16" fill="#1a1c19"/>
+<g font-size="14" fill="#1a1c19">
+<text x="66" y="164">Total  1.44 MB</text>
+<text x="66" y="188">Used    288 KB  (20%)</text>
+<text x="66" y="212">Free   1.16 MB</text>
+<text x="66" y="236">Notes  6 of 10</text>
+</g>
+<rect x="120" y="262" width="160" height="22" fill="#cbd0c5"/>
+<text x="200" y="278" font-size="13" fill="#1a1c19" text-anchor="middle">Press ESC to exit</text>
+</svg>
+</div><figcaption>Storage — a usage gauge with real total, used, and free space</figcaption></figure>
+
+<p><strong>Sync.</strong> With WiFi and a sync URL configured,
+<strong>Setup&nbsp;▸&nbsp;Sync</strong> uploads the current note to Google Drive, and
+the file there is titled after the note's name. See the README for the one-time Apps
+Script setup.</p>
+
+<h2 id="cheat"><span class="num">12</span>Shortcut cheat sheet</h2>
 <p><span class="key">Ctrl</span> and <span class="key">GUI</span> are interchangeable
 everywhere below.</p>
 
@@ -439,14 +554,16 @@ everywhere below.</p>
 <tr><td>Delete word left</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Bksp</span></span></td></tr>
 <tr><td>Undo / redo</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Z</span> / <span class="key">Y</span></span></td></tr>
 <tr><td>Bold / italic</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">B</span> / <span class="key">I</span></span></td></tr>
+<tr><td>New note</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">N</span></span></td></tr>
 <tr><td>Scratchpad (or send selection)</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">S</span></span></td></tr>
 <tr><td>Grammana Z</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">C</span></span></td></tr>
 <tr><td>Grammar check / rewrite</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">G</span> / <span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">G</span></span></td></tr>
+<tr><td>Open the menu bar</td><td><span class="combo"><span class="key">Esc</span> · <span class="key">menu</span> · double-tap <span class="key">Alt</span></span></td></tr>
 </tbody>
 </table>
 
 <footer>
-RighterDeck — a Micro Journal Rev 8 firmware mod. Built on Micro Journal by Un Kyu
+MacroJournal — a Micro Journal Rev 8 firmware mod. Built on Micro Journal by Un Kyu
 Lee (CC BY-NC 4.0). See the README for flashing, configuration, and the full
 reference.
 </footer>

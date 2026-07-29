@@ -1,8 +1,9 @@
-# RighterDeck — a Micro Journal Rev 8 firmware mod
+# MacroJournal — a Micro Journal Rev 8 firmware mod
 
 Custom firmware for the [Micro Journal Rev 8](https://github.com/unkyulee/micro-journal)
 (the ESP32-S3 writerdeck by Un Kyu Lee) that turns the stock editor into a
-small but complete, keyboard-driven writing environment.
+small but complete, keyboard-driven writing environment with a classic
+Macintosh-style shell.
 
 **What it adds over the stock firmware**
 
@@ -15,14 +16,17 @@ small but complete, keyboard-driven writing environment.
   render as you type; the file stays plain text.
 - **Per-file encryption** — real AES-256 with a password; plaintext never
   hits the disk.
-- **A redesigned home screen** — two panels, arrow-key navigation, file
-  titles, a scrolling file list with quick-launch tools, and a device name
-  you can set.
-- **A scratchpad** — a always-there note, plus "send selection to
+- **A classic-Mac home** — a pull-down menu bar over a Finder-style
+  desktop: quick-launch tool tiles, a scrolling notes window with titles,
+  and a keyboard-driven action bar.
+- **Note names** — give any note a real name; it shows on the home screen,
+  in the Notes menu, and on synced files.
+- **A scratchpad** — an always-there note, plus "send selection to
   scratchpad" while writing.
 - **Grammana Z** — an on-device LLM assistant (Anthropic, OpenAI, or
   Gemini) with grammar checking and rewriting.
-- **Dark mode**, **device rename**, and quality-of-life polish throughout.
+- **Dark mode**, **device rename**, an **About** box, a **Storage** gauge,
+  and quality-of-life polish throughout.
 
 Everything runs on stock hardware. Flashing is a one-file, browser-based
 step and does **not** erase your journal files.
@@ -39,8 +43,10 @@ step and does **not** erase your journal files.
 - [Requirements](#requirements)
 - [Flashing the firmware](#flashing-the-firmware)
 - [First-time setup](#first-time-setup)
-- [The home menu](#the-home-menu)
-- [Working with files](#working-with-files)
+- [The home screen](#the-home-screen)
+- [The menu bar](#the-menu-bar)
+- [Working with notes](#working-with-notes)
+- [Note names & rename](#note-names--rename)
 - [The editor](#the-editor)
 - [Markdown styling](#markdown-styling)
 - [Undo / redo](#undo--redo)
@@ -49,8 +55,10 @@ step and does **not** erase your journal files.
 - [Grammar check & rewrite](#grammar-check--rewrite)
 - [Per-file passwords (encryption)](#per-file-passwords-encryption)
 - [Dark mode](#dark-mode)
-- [Device rename](#device-rename)
-- [Other menu functions](#other-menu-functions)
+- [Device name](#device-name)
+- [About & Storage](#about--storage)
+- [WiFi, language, Bluetooth & drive mode](#wifi-language-bluetooth--drive-mode)
+- [Sync to Google Drive](#sync-to-google-drive)
 - [Configuration files](#configuration-files)
 - [Files on the drive](#files-on-the-drive)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
@@ -68,9 +76,10 @@ step and does **not** erase your journal files.
 | File | Purpose |
 |---|---|
 | `firmware_rev_8.bin` | Ready-to-flash merged image (bootloader + partitions + app). Flash at address **0x0**. |
-| `rev8-text-selection-clipboard.patch` | The full source diff against upstream — the source of truth for this mod. |
+| `rev8-text-selection-clipboard.patch` | The source diff of the editor/feature layer against upstream. |
 | `keyboard.json` | A custom key layout with the mod's key names wired in (see [keyboard.json](#keyboardjson)). Copy to the device drive root. |
 | `grammana_z.json.example` | Template for the LLM assistant config. Copy to the device as `grammana_z.json` with your API key. |
+| `sync.js` | The Google Apps Script for [Sync](#sync-to-google-drive), including the note-name titling. Paste into your own Apps Script project. |
 | `GUIDE.html` | The illustrated software guide (open in any browser). |
 
 `grammana_z.json` (with a real API key) is intentionally **not** in this
@@ -82,8 +91,8 @@ repo — it is git-ignored. Never commit it.
   This firmware targets the `rev_8` build only.
 - A computer with **Chrome or Edge** for the web flasher (Web Serial).
 - A USB-C cable.
-- Optional, for the LLM features: a WiFi network and an API key from
-  Anthropic, OpenAI, or Google.
+- Optional, for the LLM and sync features: a WiFi network and an API key
+  from Anthropic, OpenAI, or Google.
 
 ## Flashing the firmware
 
@@ -95,8 +104,10 @@ repo — it is git-ignored. Never commit it.
 
 Notes:
 
-- Always flash **the merged image at `0x0`**. An app-only `firmware.bin`
-  flashed at `0x0` will boot-loop.
+- Always flash **the merged image at `0x0`**. It already contains the
+  bootloader, partition table, and app at their correct offsets — do **not**
+  put it at `0x10000`. An app-only `firmware.bin` at `0x0`, or the merged
+  image at the wrong address, boot-loops with `Invalid image block`.
 - Unlike official releases, this image does **not** wipe the data
   partition — your journal files and `keyboard.json` survive an update.
 - If it seems to hang for many minutes, see
@@ -108,81 +119,127 @@ Notes:
 2. Copy `keyboard.json` from this repo onto the drive (see below) if you
    want the author's layout, or make sure your own layout includes the
    mod's key names — otherwise the new shortcuts do nothing.
-3. To use the drive: press the menu key to open the menu, then `[U]` for
-   **Drive Mode**. The device appears as a USB drive on your computer.
-   Copy files to/from its root, then eject.
-4. Optional — **WiFi**: menu → `[W]`, add a network (needed for sync and
-   Grammana Z).
+3. To reach the drive: from a note press **Esc** (or the menu key) to open
+   the menu bar, go to **Device ▸ Drive mode**, and the deck mounts as a
+   USB drive on your computer. Copy files to/from its root, then eject.
+4. Optional — **WiFi**: menu bar → **Setup ▸ WiFi**, add a network (needed
+   for sync and Grammana Z).
 5. Optional — **Grammana Z**: copy `grammana_z.json` (from the example,
-   with your API key) to the drive root. The `[G]` entry appears once the
+   with your API key) to the drive root. The Grammana entry works once the
    file is present.
 
 ---
 
-## The home menu
+## The home screen
 
-Open the menu with the dedicated menu key. The screen is two panels under
-matching headers, split by a divider, with the device title
-(**RighterDeck** by default) centered in the toolbar.
+The home screen is a classic-Mac desktop. When you leave a note you land
+here; the deck also boots straight into your last note, and **Esc** from
+that note brings up the [menu bar](#the-menu-bar) over the home screen.
 
-**Navigation** — arrow keys move a highlight in the active pane and
-**Enter** activates it; the bracketed letter/number hotkeys also work
-directly at any time. **ESC** from any sub-screen (WiFi, Language, Sync,
-…) returns to the main menu rather than dropping out to your note.
+It has three parts:
 
-**Left pane — `MENU`** (device commands, ordered by their bracket key):
+- **Menu bar** across the top — `File · Notes · Tools · Setup · Device`.
+- **Tool tiles** — three quick-launch tiles: **Scratch** (scratchpad),
+  **Gramma** (Grammana Z), and **Last** (the note you edited most
+  recently).
+- **Notes window** — a titled, scrolling window listing your ten notes
+  `[0]`–`[9]`. Each row shows the note's **name** (if set) or its first
+  line as a title, `-` when empty, or `LOCKED` when encrypted. A scroll bar
+  and a down-arrow appear when there are more rows than fit.
+- **Action bar** at the bottom — the keys that act on the highlighted note:
+  `C CLEAR · P LOCK · R RENAME`.
 
-| Key | Command | What it does |
-|---|---|---|
-| `[I]` | DARK: ON/OFF | Toggle dark mode |
-| `[L]` | LANGUAGE | Choose the keyboard layout |
-| `[N]` | DEVICE NAME | Rename the device (the toolbar title) |
-| `[S]` | SYNC | Upload files to Google Drive (only shown once configured) |
-| `[T]` | BLE KEYS | Use the deck as a Bluetooth keyboard for another device |
-| `[U]` | DRIVE | USB Drive Mode (access files from a computer) |
-| `[W]` | WIFI | Configure WiFi networks |
-| `[B]` | BACK | Return to the editor |
+**Navigation**
 
-`[F]` (open the file list / start navigation) sits next to the **CHOOSE A
-FILE** header rather than in this column.
+- **Arrow keys** move the highlight. Left/Right step across the three
+  tiles; **Down** drops from the tiles into the notes list; **Up** from the
+  top note returns to the tiles. The notes list scrolls and wraps.
+- **Enter** opens whatever is highlighted (a tool or a note).
+- **Direct keys** work any time, without highlighting first:
 
-**Right pane — `CHOOSE A FILE`** (one scrolling list):
+| Key | Does |
+|---|---|
+| `0`–`9` | Open that note |
+| `S` | Scratchpad |
+| `G` | Grammana Z |
+| `/` | Last note |
+| `N` | New note (first empty slot) |
+| `P` | Lock / unlock the highlighted note |
+| `R` | Rename the highlighted note |
+| `C` | Clear the highlighted note |
+| `W` `L` `B` `I` `U` | WiFi · Language · BLE keyboard · Dark mode · Drive mode |
+| `Esc` / menu key | Open the menu bar |
 
-- `[S]` **SCRATCHPAD**, `[G]` **GRAMMANA Z**, and `[/]` **LAST NOTE**
-  (jumps to the note you edited most recently, with its number in
-  brackets) are the first three entries, followed by a separator line.
-- Then the ten notes `[0]`–`[9]`, each showing its first line as a title
-  (markdown markers stripped) or `-` when empty. Protected notes show
-  `LOCKED`. A `>` marks the currently open file/tool.
-- Press a bracketed key to open any entry directly (`S` / `G` / `/` /
-  `0`–`9`), or press `F` to navigate with the arrows.
-- A **down-chevron** at the bottom means more notes are below — scroll to
-  them. Titles refresh every time the menu opens.
+## The menu bar
 
-## Working with files
+The pull-down menu bar is the classic way to reach everything. Open it and
+you can drive the whole device from the keyboard.
+
+**Opening it**
+
+- From the **home screen**: press **Esc** or the menu key.
+- From **inside a note**: press **Esc**, the menu key, or **double-tap the
+  Alt key** (the key next to Ctrl/GUI, tapped twice quickly).
+
+**Using it**
+
+- **←/→** move between the five menus; **↑/↓** move within the open menu;
+  **Enter** runs the highlighted item.
+- A menu item's **shortcut letter** is shown on its right, and pressing that
+  letter runs it from anywhere in the bar.
+- The escape ladder from an open menu:
+  - **Esc** → leave the bar (to the home screen, or back to the note if you
+    opened it from a sub-screen).
+  - **Shift+Esc** (in a note) → close the bar and drop the cursor back
+    exactly where it was.
+
+**The menus**
+
+| Menu | Items |
+|---|---|
+| **File** | New note (`N`); for the selected note: Rename (`R`), Lock / Unlock (`P`), Clear (`C`) |
+| **Notes** | Every non-empty note, by name or title — jump straight to one |
+| **Tools** | Grammana (`G`), Scratchpad (`S`) |
+| **Setup** | WiFi (`W`), Language (`L`), BLE keyboard (`B`), Dark on/off (`I`), Sync (when configured) |
+| **Device** | About, Device name, Storage, Drive mode (`U`), Restart |
+
+## Working with notes
 
 You have **ten notes** (`0`–`9`) plus three built-in tools (Scratchpad,
-Grammana Z, Last Note). Open any of them from the file list.
+Grammana Z, Last note). Open any of them from the home screen — arrow to it
+and press **Enter**, or press its direct key.
 
-**File navigation (`F`)** — press `F` and a row highlights in inverse
-video; the left pane switches from the command list to the **actions** for
-the highlighted row:
+**Acting on a note** — highlight a note in the notes window, then:
 
 | Key | Action |
 |---|---|
-| Arrows | Move the highlight (wraps at the ends; the list scrolls) |
-| Enter | Open the highlighted item |
-| `D` | Clear the highlighted **note** (asks to confirm; locked notes verify the password first) |
-| `P` | Set / remove a **note's** password |
-| `F` / ESC | Exit navigation |
+| `Enter` | Open it |
+| `R` | **Rename** — give it a name (or clear the name) |
+| `P` | Set / remove its **password** |
+| `C` | **Clear** it (asks to confirm; locked notes verify the password first) |
 
-`D` and `P` apply to real notes only — the three tools show just **OPEN**.
-The highlight is **sticky**: open something, come back, and it's still
-where you left it.
+These are exactly the `File` menu's items and the action bar at the bottom
+of the home screen — use whichever you like. Clearing keeps a
+`*_backup.txt`.
 
-**Titles** — a note's title is its first line, with leading whitespace and
-markdown markers (`>`, `#`, `*`) stripped, so a note that starts with
-`# Chapter one` shows as `Chapter one`.
+**New notes** — press **`N`** on the home screen, choose **File ▸ New
+note**, or press **Ctrl+N from anywhere** (even mid-sentence in another
+note). It opens the first empty slot, saving your current note first. If
+all ten slots are in use, nothing happens.
+
+## Note names & rename
+
+Any note can have a real name instead of showing its first line.
+
+- **Rename** with `R` on the home screen, **File ▸ Rename**, or the
+  `R RENAME` action bar. A small dialog opens pre-filled with the current
+  name: type up to 20 characters, **Enter** saves, **Esc** cancels. Clear
+  the field and save to drop the name and go back to the first-line title.
+- A named note shows that name on the home screen, in the **Notes** menu,
+  and as the title of its [synced](#sync-to-google-drive) Google Drive file.
+- Names are stored in `config.json` under a `names` object (keyed by slot),
+  so they travel with your settings and never touch the note's text. New
+  notes start unnamed.
 
 ## The editor
 
@@ -208,10 +265,12 @@ on disk. Files save automatically.
 | Delete word to the left | Ctrl + Backspace |
 | Undo / redo | Ctrl + Z / Y |
 | Bold / italic markers | Ctrl + B / I |
+| New note | Ctrl + N |
 | Open / send-to scratchpad | Ctrl+Shift + S |
 | Grammana Z assistant | Ctrl+Shift + C |
 | Grammar check | Ctrl + G |
 | Grammar rewrite | Ctrl+Shift + G |
+| Open the menu bar | Esc, menu key, or double-tap Alt |
 
 Selections render in **inverse video**. Typing replaces the selection;
 Backspace/DEL deletes it; plain cursor movement drops it. The clipboard
@@ -243,10 +302,10 @@ page across the 8 KB window boundary.
 
 ## Scratchpad
 
-**Ctrl+Shift+S** (or the `[S]` SCRATCHPAD row in the file list) opens a
-plain-text scratchpad — a quick, always-there note (status bar
-`SCRATCHPAD`). ESC saves it and returns you to the file you were in. It
-lives in slot 10 (`10.txt` on the drive, included in sync).
+**Ctrl+Shift+S**, the **Scratch** tile, **Tools ▸ Scratchpad**, or `S` on
+the home screen opens a plain-text scratchpad — a quick, always-there note
+(status bar `SCRATCHPAD`). ESC saves it and returns you to the file you were
+in. It lives in slot 10 (`10.txt` on the drive, included in sync).
 
 **Send selection to scratchpad** — if you have text highlighted in a note,
 **Ctrl+Shift+S** instead appends that selection to the scratchpad (on its
@@ -258,8 +317,8 @@ the scratchpad itself isn't encrypted.)
 
 ## Grammana Z (LLM assistant)
 
-The **GRAMMANA Z** row in the file list (or `G` on the home screen, or
-**Ctrl+Shift+C** in the editor) opens the assistant (status bar `GZ`).
+The **Gramma** tile, **Tools ▸ Grammana**, `G` on the home screen, or
+**Ctrl+Shift+C** in the editor opens the assistant (status bar `GZ`).
 
 - Type a question and press **Shift+Enter** to send. The request runs on
   the second CPU core, so typing stays live while it thinks.
@@ -287,9 +346,9 @@ can be overridden with `grammar_system` / `rewrite_system` in the config.
 
 ## Per-file passwords (encryption)
 
-Password management lives in **file navigation**: press `F`, highlight a
-note, and press **`P`** to set or remove its password — no need to open the
-file (locked notes verify the old password first).
+To lock or unlock a note, highlight it on the home screen and press **`P`**
+(or use **File ▸ Lock / Unlock**) — locked notes verify the old password
+first, so you don't have to open the file.
 
 Setting a password re-writes the file as **AES-256-CTR ciphertext**, so
 plaintext never touches the disk again — Drive Mode, sync, and backups
@@ -317,45 +376,78 @@ that backup is still ciphertext.
 
 ## Dark mode
 
-`[I]` on the menu toggles **hardware panel inversion** — white text on
-black. Everything (selection, markdown styling, menu highlights) renders
-inverted automatically. It persists across reboots.
+**Setup ▸ Dark**, or `I` on the home screen, toggles **hardware panel
+inversion** — white text on black. Everything (selection, markdown styling,
+menu highlights) renders inverted automatically. It persists across
+reboots.
 
-## Device rename
+## Device name
 
-The toolbar title (default **RighterDeck**) is yours to change: press
-`[N] DEVICE NAME` on the menu, type a new name into the header bar (up to
-12 characters), and press **Enter** — it saves and drops you straight back
-into the editor (ESC cancels). The name shows at the top of the menu from
-then on and persists across reboots (stored in `config.json` as `"title"`,
-so you can also set it from a computer in Drive Mode).
+The device name (default **MacroJournal**) shows on the home window's title
+bar and the sub-screen headers, and it's yours to change: open **Device ▸
+Device name**, type a new name (up to 16 characters) into the dialog, and
+press **Enter** — ESC cancels. Clearing the field resets it to
+`MacroJournal`. The name persists across reboots (stored in `config.json`
+as `"title"`, so you can also set it from a computer in Drive Mode).
 
-## Other menu functions
+## About & Storage
 
-These come from the stock firmware and behave as normal:
+Two informational screens live under the **Device** menu:
 
-- **`[W]` WIFI** — add and edit WiFi networks (stored on the device's
-  internal flash, not the drive). Needed for Sync and Grammana Z. The radio
-  is only powered during a request and switched off afterward.
-- **`[L]` LANGUAGE** — pick the keyboard layout (US, UK, DE, FR, and
-  more). Saved to config.
-- **`[T]` BLE KEYS** — the deck advertises itself as a **Bluetooth
-  keyboard**; pair it from a computer or phone and what you type on the
-  deck is sent to that device. (The battery level it reports is a fixed
-  default, not a real reading — see [Known limitations](#known-limitations).)
-- **`[U]` DRIVE** — **USB Drive Mode**. The device mounts as a USB mass
-  storage drive so you can copy files and configs to/from its root. Exiting
-  reboots the device to remount the filesystem cleanly.
-- **`[S]` SYNC** — upload your files to Google Drive via a Google Apps
-  Script endpoint (its URL goes in `config.json` under `sync.url`; there is
-  no on-device setup for the URL). The row only appears once a URL is
-  configured.
+- **About** — a full-screen "About this MacroJournal" card with the Happy
+  Mac mark, your device name, the firmware version, and the upstream
+  credit. **Esc** returns to the home screen.
+- **Storage** — a Get-Info-style box with a usage gauge and the real
+  **Total / Used / Free** figures for the internal data partition, plus how
+  many of your ten note slots are in use. **Esc** returns home. (This is the
+  *free-space* view; **Drive mode** is the separate USB one below.)
+
+## WiFi, language, Bluetooth & drive mode
+
+These come from the stock firmware and behave as normal. Reach them from
+the menu bar (or their home-screen hotkeys).
+
+- **Setup ▸ WiFi** (`W`) — add and edit WiFi networks (stored on the
+  device's internal flash, not the drive). Needed for Sync and Grammana Z.
+  The radio is only powered during a request and switched off afterward.
+- **Setup ▸ Language** (`L`) — pick the keyboard layout (US, UK, DE, FR,
+  and more). Saved to config.
+- **Setup ▸ BLE keyboard** (`B`) — the deck advertises itself as a
+  **Bluetooth keyboard**; pair it from a computer or phone and what you type
+  on the deck is sent to that device. (The battery level it reports is a
+  fixed default, not a real reading — see
+  [Known limitations](#known-limitations).)
+- **Device ▸ Drive mode** (`U`) — **USB Drive Mode**. The device mounts as
+  a USB mass storage drive so you can copy files and configs to/from its
+  root. Exiting reboots the device to remount the filesystem cleanly.
+- **Device ▸ Restart** — reboot the deck.
+
+## Sync to Google Drive
+
+**Setup ▸ Sync** uploads the current note to Google Drive through a Google
+Apps Script endpoint. The entry only appears once a URL is configured (in
+`config.json` under `sync.url`; there is no on-device setup for the URL).
+
+**Named files** — the deck sends the note's name along with the upload, so
+the file in Drive is titled after the note (a named note by its name, an
+unnamed note by its first line, the scratchpad and Grammana as
+`Scratchpad` / `Grammana`). This needs the bundled script:
+
+1. Open your Google Apps Script project (the one behind your `sync.url`).
+2. Replace its contents with **`sync.js`** from this repo and **redeploy**.
+3. Set the folder path at the top of the script if you haven't already.
+
+Until the script is updated the deck still syncs exactly as before — the
+name it sends is simply ignored, and files keep the old timestamp name.
+All sync traffic verifies the server certificate (see
+[Security notes](#security-notes)).
 
 ---
 
 ## Configuration files
 
-Config files live in the **drive root** (reach it with Drive Mode, `[U]`).
+Config files live in the **drive root** (reach it with **Device ▸ Drive
+mode**).
 
 ### grammana_z.json
 
@@ -377,9 +469,9 @@ next keypress.
 
 ### wifi.json
 
-The device's WiFi setup. Configure it **on-device** via `[W]` (it's saved
-to internal flash for safety, not to the drive). Needed for Sync and the
-LLM features.
+The device's WiFi setup. Configure it **on-device** via **Setup ▸ WiFi**
+(it's saved to internal flash for safety, not to the drive). Needed for
+Sync and the LLM features.
 
 ### keyboard.json
 
@@ -391,12 +483,17 @@ mod's key names** (`CTRL`, `GUI`, `SELECT_LEFT`, `WORD_RIGHT`, `DOC_END`,
 features silently go dead. Remove the file to revert to the compiled
 layout.
 
+> Note: `Ctrl+N` (new note) and the other Ctrl-combos resolve in the
+> compiled firmware, not in `keyboard.json`, so they work regardless of
+> your layout file.
+
 ### config.json
 
 The device's own settings file (created automatically). Notable fields
-this mod uses: `title` (device name), `darkmode`, `last_note`, and
-`sync.url` (Google Drive endpoint). You normally change these through the
-menu, but they're editable in Drive Mode too.
+this mod uses: `title` (device name), `names` (per-note names, keyed by
+slot), `darkmode`, `last_note`, and `sync.url` (Google Drive endpoint).
+You normally change these through the menu, but they're editable in Drive
+Mode too.
 
 ## Files on the drive
 
@@ -407,7 +504,7 @@ menu, but they're editable in Drive Mode too.
 | `11.txt` | The Grammana Z conversation |
 | `12.txt` | The last grammar-check / rewrite report |
 | `*_backup.txt` | Automatic backup made when a file is cleared |
-| `config.json` | Device settings |
+| `config.json` | Device settings (title, note names, dark mode, sync URL) |
 | `wifi.json` | WiFi networks (usually on internal flash) |
 | `grammana_z.json` | LLM config + your API key |
 | `keyboard.json` | Key layout (optional) |
@@ -423,9 +520,10 @@ The web flasher can stall if the port is busy or the cable is charge-only.
 Unplug, use a known-good data cable on the **upper** USB-C port, close any
 serial monitor, and retry. A normal program takes ~1 minute.
 
-**The device boot-loops after flashing.**
-You likely flashed an app-only `firmware.bin` at `0x0`. Always flash the
-**merged** `firmware_rev_8.bin` at `0x0`.
+**The device boot-loops after flashing (`Invalid image block`).**
+The merged image was flashed at the wrong address, or you flashed an
+app-only `firmware.bin`. Flash the **merged** `firmware_rev_8.bin` at
+**`0x0`** (not `0x10000`).
 
 **The new shortcuts (selection, etc.) do nothing.**
 Your `keyboard.json` on the drive is overriding the layout and lacks the
@@ -433,16 +531,22 @@ mod's key names. Use this repo's `keyboard.json`, or add the new names to
 yours. (A `keyboard.json` replaces the compiled layout entirely.)
 
 **Grammana Z says `NO WIFI` / `NO grammana_z.json` / `NO API KEY`.**
-- `NO WIFI` — set up a network via `[W]` and make sure it's in range.
+- `NO WIFI` — set up a network via **Setup ▸ WiFi** and make sure it's in
+  range.
 - `NO grammana_z.json` — the config file isn't on the drive root (or is
   still named `claude.json` from an older build — rename it).
 - `NO API KEY` — the key field for your chosen provider is empty.
 
-**Sync doesn't work / `[S]` isn't on the menu.**
-`[S]` only appears when `config.sync.url` is set. There's no on-device way
+**Sync doesn't work / there's no Sync entry.**
+Sync only appears when `config.sync.url` is set. There's no on-device way
 to set it — add your Google Apps Script URL to `config.json` in Drive Mode.
 
-**I forgot a file's password.**
+**My synced files still have timestamp names, not note names.**
+The deployed Apps Script hasn't been updated yet. Paste this repo's
+`sync.js` into your Apps Script project and redeploy (see
+[Sync](#sync-to-google-drive)).
+
+**I forgot a note's password.**
 There is no recovery — the file is permanently unreadable. This is by
 design (real encryption). Always test on a throwaway file first.
 
@@ -492,6 +596,9 @@ back up first if you flash one of those.)
 
 ## Rebuilding from source
 
+The bundled `rev8-text-selection-clipboard.patch` captures the editor and
+feature layer against upstream:
+
 ```sh
 git clone https://github.com/unkyulee/micro-journal
 cd micro-journal
@@ -507,27 +614,34 @@ boot-loops — always merge):
 ```sh
 cd .pio/build/rev_8
 esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
-  --flash_mode dio --flash_freq 80m --flash_size 16MB \
+  --flash_mode dio --flash_size 16MB \
   0x0 bootloader.bin 0x8000 partitions.bin \
   0xe000 <arduino-esp32>/tools/partitions/boot_app0.bin \
   0x10000 firmware.bin
 ```
 
-The patch also keeps `rev_4_68` and `rev_6` building, so you can sanity-
-check that the shared editor changes don't break other revisions.
+> The patch tracks the editor/feature layer. The classic-Mac shell
+> (menu bar, home screen, About/Storage, note names) is newer than the
+> patch snapshot — check the release notes for the matching source drop if
+> you're building the full UI.
 
 ## Implementation notes
 
 - Editor engine changes are shared by all Micro Journal revisions but
   gated behind `Editor::selectionSupported`, which only the Rev 8 (RLCD)
   display enables — other devices are unaffected.
-- New key codes are 2100–2129 in `src/service/Editor/Editor.h`; the
-  encryption service is `src/service/Crypt/`, the LLM service
-  `src/service/AskClaude/`, and the HTTPS root CA trust store
-  `src/service/Certs/`.
+- New key codes are 2100–2130 in `src/service/Editor/Editor.h`; the
+  encryption service is `src/service/Crypt/`, note names
+  `src/service/NoteNames/`, the LLM service `src/service/AskClaude/`, and
+  the HTTPS root CA trust store `src/service/Certs/`.
+- The classic-Mac UI lives in `src/display/RLCD/`: the shared menu bar in
+  `MenuBar/`, the Happy Mac art in `Logo/`, and the home / About / Storage
+  screens under `Menu/`.
 - The menu and dialogs render in `profont22` — after hardware testing, the
   only font family that stays readable on this panel (condensed fonts pack
-  letters together; thin-stroke fonts render ragged).
+  letters together; thin-stroke fonts render ragged). UI text is drawn on a
+  fixed, even-aligned cell pitch because the panel stores the horizontal
+  axis at half resolution.
 - The undo engine and the encryption offset math were verified with
   host-side AddressSanitizer harnesses built from the shipped code
   (windowed reads at odd offsets, fast and splice save paths, 300
