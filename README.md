@@ -119,8 +119,8 @@ Notes:
 2. Copy `keyboard.json` from this repo onto the drive (see below) if you
    want the author's layout, or make sure your own layout includes the
    mod's key names — otherwise the new shortcuts do nothing.
-3. To reach the drive: from a note press **Esc** (or the menu key) to open
-   the menu bar, go to **Device ▸ Drive mode**, and the deck mounts as a
+3. To reach the drive: open the menu bar (double-tap **Alt**, or **`Ctrl+~`**;
+   from the home screen **Esc** works too), go to **Device ▸ Drive mode**, and the deck mounts as a
    USB drive on your computer. Copy files to/from its root, then eject.
 4. Optional — **WiFi**: menu bar → **Setup ▸ WiFi**, add a network (needed
    for sync and Grammana Z).
