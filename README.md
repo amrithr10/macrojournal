@@ -242,6 +242,9 @@ Any note can have a real name instead of showing its first line.
   `^R RENAME` action bar. A small dialog opens pre-filled with the current
   name: type up to 20 characters, **Enter** saves, **Esc** cancels. Clear
   the field and save to drop the name and go back to the first-line title.
+  The field is a proper line editor — **←/→** and **Home/End** move the
+  caret, **Ctrl+←/→** jump by word, and **Backspace / Delete / Ctrl+Backspace**
+  edit at the caret.
 - A named note shows that name on the home screen, in the **Notes** menu,
   and as the title of its [synced](#sync-to-google-drive) Google Drive file.
 - Names are stored in `config.json` under a `names` object (keyed by slot),
