@@ -84,7 +84,7 @@ step and does **not** erase your journal files.
 | File | Purpose |
 |---|---|
 | `firmware_rev_8.bin` | Ready-to-flash merged image (bootloader + partitions + app). Flash at address **0x0**. |
-| `rev8-text-selection-clipboard.patch` | Source diff against upstream as of 2026-07-29 — editor, features, and the classic-Mac UI. Older than the binary; see [Rebuilding from source](#rebuilding-from-source). |
+| `rev8-text-selection-clipboard.patch` | The full source diff against upstream — editor, features, and the classic-Mac UI. Applies to the base commit below and matches the binary. |
 | `keyboard.json` | A custom key layout with the mod's key names wired in (see [keyboard.json](#keyboardjson)). Copy to the device drive root. |
 | `grammana_z.json.example` | Template for the LLM assistant config. Copy to the device as `grammana_z.json` with your API key. |
 | `sync.js` | The Google Apps Script for [Sync](#sync-to-google-drive), including the note-name titling. Paste into your own Apps Script project. |
@@ -717,16 +717,9 @@ back up first if you flash one of those.)
 
 ## Rebuilding from source
 
-The bundled `rev8-text-selection-clipboard.patch` is a source diff against
-upstream covering the editor and feature layer and the classic-Mac UI as of
-**2026-07-29**.
-
-> **The patch is behind the binary.** It predates the per-row display
-> refresh, the font picker, clipboard history, the WordGrinder view, the
-> shortcuts sheet, and lists — so building from it gives you an earlier
-> version than `firmware_rev_8.bin`.
-
-To build that version:
+The bundled `rev8-text-selection-clipboard.patch` is the complete source
+diff — the editor and feature layer *and* the classic-Mac UI — against
+upstream. It matches the current `firmware_rev_8.bin`:
 
 ```sh
 git clone https://github.com/unkyulee/micro-journal
@@ -749,8 +742,9 @@ esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
   0x10000 firmware.bin
 ```
 
-> The patch was verified to apply cleanly on the base commit above and to
-> build both `rev_8` and `rev_4_68`.
+> The patch reproduces the full firmware tree — verified (2026-10-08) to
+> apply cleanly on the base commit above, to produce a tree byte-identical
+> to the firmware source, and to build both `rev_8` and `rev_4_68`.
 
 ## Implementation notes
 
