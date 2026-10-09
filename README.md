@@ -8,7 +8,10 @@ Macintosh-style shell.
 **What it adds over the stock firmware**
 
 - **Text selection & clipboard** — select by character, word, line, or the
-  whole document; cut / copy / paste.
+  whole document; cut / copy / paste, plus a **clipboard history** of your
+  last 8 copies.
+- **Lists & formatting** — bulleted and numbered lists that continue on
+  Enter, nest with Tab, and renumber themselves; headings; a format menu.
 - **Word & document navigation** — jump by word, to line ends, and across
   the whole document.
 - **Undo / redo** — up to 10 coalesced steps.
@@ -25,6 +28,8 @@ Macintosh-style shell.
   scratchpad" while writing.
 - **Grammana Z** — an on-device LLM assistant (Anthropic, OpenAI, or
   Gemini) with grammar checking and rewriting.
+- **A choice of fonts** (including JetBrains Mono), a distraction-free
+  **WordGrinder view**, and an on-screen **shortcuts sheet**.
 - **Dark mode**, **device rename**, an **About** box, a **Storage** gauge,
   and quality-of-life polish throughout.
 
@@ -49,6 +54,9 @@ step and does **not** erase your journal files.
 - [Note names & rename](#note-names--rename)
 - [The editor](#the-editor)
 - [Markdown styling](#markdown-styling)
+- [Lists](#lists)
+- [Clipboard history](#clipboard-history)
+- [Fonts & WordGrinder view](#fonts--wordgrinder-view)
 - [Undo / redo](#undo--redo)
 - [Scratchpad](#scratchpad)
 - [Grammana Z (LLM assistant)](#grammana-z-llm-assistant)
@@ -76,7 +84,7 @@ step and does **not** erase your journal files.
 | File | Purpose |
 |---|---|
 | `firmware_rev_8.bin` | Ready-to-flash merged image (bootloader + partitions + app). Flash at address **0x0**. |
-| `rev8-text-selection-clipboard.patch` | The full source diff against upstream — editor, features, and the classic-Mac UI. Applies to the base commit below. |
+| `rev8-text-selection-clipboard.patch` | Source diff against upstream as of 2026-07-29 — editor, features, and the classic-Mac UI. Older than the binary; see [Rebuilding from source](#rebuilding-from-source). |
 | `keyboard.json` | A custom key layout with the mod's key names wired in (see [keyboard.json](#keyboardjson)). Copy to the device drive root. |
 | `grammana_z.json.example` | Template for the LLM assistant config. Copy to the device as `grammana_z.json` with your API key. |
 | `sync.js` | The Google Apps Script for [Sync](#sync-to-google-drive), including the note-name titling. Paste into your own Apps Script project. |
@@ -204,8 +212,8 @@ Alt key** (the key next to Ctrl/GUI, tapped twice quickly), or press
 |---|---|
 | **File** | New note (`^N`); for the selected note: Rename (`^R`), Lock / Unlock (`^L`), Clear (`^C`), Sync (`^S`) |
 | **Notes** | Every non-empty note, by name or title — jump straight to one |
-| **Tools** | Grammana (`G`), Scratchpad (`S`) |
-| **Setup** | WiFi (`W`), Language (`L`), BLE keyboard (`B`), Dark on/off (`I`), Sync all (when configured) |
+| **Tools** | Grammana (`G`), Scratchpad (`S`); inside a note also Format (`^P`) and Shortcuts (`^/`) |
+| **Setup** | WiFi (`W`), Language (`L`), BLE keyboard (`B`), Dark on/off (`I`), WordGrinder on/off; inside a note also Font (`F`); Sync all (when configured) |
 | **Device** | About, Device name, Storage, Drive mode (`U`), Restart |
 
 ## Working with notes
@@ -269,26 +277,41 @@ on disk. Files save automatically.
 | Select to line start / end | Shift + Home / End |
 | Select all | Ctrl + A |
 | Copy / cut / paste | Ctrl + C / X / V |
+| Clipboard history (paste an older copy) | Ctrl+Shift + V |
 | Move by word | Ctrl + ←/→ |
 | Line start / end | Home / End (also with Ctrl or Ctrl+Shift) |
 | Document start / end | Ctrl + PgUp / PgDn |
 | Delete word to the left | Ctrl + Backspace |
 | Undo / redo | Ctrl + Z / Y |
 | Bold / italic markers | Ctrl + B / I |
+| Heading 1 / 2 / 3 | Ctrl + 1 / 2 / 3 |
+| Format menu | Ctrl + P |
+| Numbered / bulleted list (selection or line) | Ctrl+Shift + 7 / 8 |
+| Indent / outdent a list item | Tab / Shift+Tab |
+| Shortcuts sheet | Ctrl + / |
 | New note | Ctrl + N |
 | Lock / unlock this note | Ctrl + L |
 | Rename this note | Ctrl + R |
 | Sync this note | Ctrl + S |
 | Open / send-to scratchpad | Ctrl+Shift + S |
 | Grammana Z assistant | Ctrl+Shift + C |
-| Grammar check | Ctrl + G |
-| Grammar rewrite | Ctrl+Shift + G |
+| Grammar check | Ctrl + G (or Ctrl + Enter) |
+| Grammar rewrite | Ctrl+Shift + G (or Ctrl+Shift + Enter) |
 | Leave the note (to the home menu) | Esc |
 | Open the menu bar | double-tap Alt, or Ctrl+~ |
 
 Selections render in **inverse video**. Typing replaces the selection;
-Backspace/DEL deletes it; plain cursor movement drops it. The clipboard
-holds **2 KB** and is UTF-8 safe.
+Backspace/DEL deletes it; plain cursor movement drops it. Each clipboard
+entry holds **2 KB** and is UTF-8 safe; the last 8 are kept (see
+[Clipboard history](#clipboard-history)).
+
+Text starts at the **top** of the page and grows downward, scrolling only
+once you reach the bottom. **Ctrl+/** (or **Tools ▸ Shortcuts**) opens a
+scrollable sheet of every shortcut — ↑/↓ scroll, Esc closes.
+
+> **The Tab key.** The deck's keypad has no dedicated Tab — the key to the
+> left of **Q** acts as Tab (and **Shift** + that key as Shift+Tab). A USB
+> keyboard's Tab key works too. Outside a list, Tab inserts two spaces.
 
 The editor works on an **8 KB window** of the file at a time, paging as you
 move — so very long files scroll smoothly without needing the whole file
@@ -298,14 +321,81 @@ in memory.
 
 Files stay plain text; the screen styles markdown live as you type:
 
-- `**bold**` renders **double-struck** (heavier strokes).
+- `**bold**` renders in a **real bold face** with the ProFont and
+  JetBrains Mono fonts (other fonts show bold at normal weight).
 - `*italic*` renders **underlined** (the panel can't slant glyphs).
+- `# Heading` lines (`#`, `##`, `###`) — **Ctrl+1 / 2 / 3** add or toggle
+  them on the current line or every line of a selection.
 - `> quote` paragraphs get a **bar in the left margin** and keep the quote
   going on each Enter until you press Enter on an empty line.
+- `- item` and `1. item` are [lists](#lists).
 
 **Ctrl+B / Ctrl+I** wrap the current selection in the markers, or insert
-an empty pair to type into. The markers stay visible; emphasis resets at
-each newline.
+an empty pair to type into. The markers stay visible (unless you turn on
+the [WordGrinder view](#fonts--wordgrinder-view)); emphasis resets at each
+newline.
+
+**The format menu** — **Ctrl+P** (or **Tools ▸ Format**) opens a small menu
+over the note with every style: Bold, Italic, Strike, Code, H1–H3, List,
+Number, and Quote. Use ↑/↓ and **Enter**, press an item's letter, or **Esc**
+to close. Line styles apply to every line of the selection.
+
+## Lists
+
+Lists behave like they do in Google Docs or Word.
+
+**Starting one** — select some lines (or just put the caret on one) and
+press **Ctrl+Shift+7** for a numbered list or **Ctrl+Shift+8** for a
+bulleted one. You can also use the format menu (**Ctrl+P**, then **N** or
+**L**), or simply type `1. ` or `- ` at the start of a line.
+
+| Key | On a list item |
+|---|---|
+| **Enter** | Starts the next item at the same level. Enter in the middle of an item splits it. |
+| **Enter** on an empty item | Moves it up one level; at the top level it ends the list. |
+| **Tab** | Indents the item one level (up to 5 levels). |
+| **Shift+Tab** | Outdents one level; at the top level it removes the marker. |
+| **Backspace** right after the marker | Same as Shift+Tab. |
+
+**Numbering is automatic.** After every Enter, Tab, Shift+Tab or Backspace
+the whole list is renumbered from its indentation, so inserting, removing
+or moving items never leaves gaps. Levels alternate numbers and letters:
+
+```
+1. First
+2. Second
+  a. Nested
+  b. Nested
+    1. Deeper
+3. Third
+```
+
+Each level is indented two spaces. Bullets use `-` at every level; the
+indent shows the nesting.
+
+## Clipboard history
+
+**Ctrl+Shift+V** opens your last **8** copies and cuts (duplicates are
+merged, newest first). The left column lists a short preview of each; the
+right shows the full text of the highlighted one. **↑/↓** pick, **Enter**
+pastes it at the caret, **Esc** closes. Plain **Ctrl+V** still pastes the
+most recent copy.
+
+## Fonts & WordGrinder view
+
+**Fonts** — inside a note, open **Setup ▸ Font** (the menu shows the current
+one). Pick with ↑/↓ and **Enter** (or the number key); the note re-lays out
+immediately and the choice is saved. Available faces: **ProFont** (22 and
+29, plus a bold), **JetBrains Mono** (20 and 26, regular and bold), and the
+Korean faces. ProFont 22 is the default and the most proven on this panel.
+
+**WordGrinder view** — **Setup ▸ WordGrinder** toggles a cleaner reading
+view, inspired by the WordGrinder word processor. On every line **except
+the one you're editing**, markdown markers are hidden and only the styling
+shows: headings drop their `#` and render bold, quotes keep just their
+margin bar, and `*` / `**` disappear. The line with the caret always shows
+the raw text, so editing and cursor movement work exactly as before. The
+file itself never changes.
 
 ## Undo / redo
 
@@ -443,6 +533,8 @@ in two flavours:
 
 - **Sync this note** — `Ctrl+S` (or the `^S SYNC` action bar / `File ▸ Sync`)
   syncs the selected note on the home screen, or the note you're editing.
+  Started from inside a note, it brings you straight back to that note when
+  it finishes (press any key on the result screen).
 - **Sync all** — `Setup ▸ Sync all` uploads every non-empty note (0–9) plus
   the scratchpad in one WiFi session, showing `Syncing 3 of 7…` as it goes;
   a note that fails doesn't stop the rest.
@@ -615,12 +707,26 @@ back up first if you flash one of those.)
 - **Ten note slots** (`0`–`9`) plus the three tools — the file model is
   fixed.
 - **Italic is shown as underline** — the panel can't slant glyphs.
+- **No sleep or auto-off.** The deck stays fully awake while it's switched
+  on, even when idle, and there's no low-battery cutoff. Switch it off when
+  you're done — leaving it on can run the battery completely flat, which
+  is hard on the cell.
+- **List detection is literal.** A line that starts with a number or a
+  single lowercase letter followed by `. ` (for example `a. ` or `12. `)
+  counts as a list item, so Enter and Tab treat it as one.
 
 ## Rebuilding from source
 
-The bundled `rev8-text-selection-clipboard.patch` is the complete source
-diff — the editor and feature layer *and* the classic-Mac UI — against
-upstream:
+The bundled `rev8-text-selection-clipboard.patch` is a source diff against
+upstream covering the editor and feature layer and the classic-Mac UI as of
+**2026-07-29**.
+
+> **The patch is behind the binary.** It predates the per-row display
+> refresh, the font picker, clipboard history, the WordGrinder view, the
+> shortcuts sheet, and lists — so building from it gives you an earlier
+> version than `firmware_rev_8.bin`.
+
+To build that version:
 
 ```sh
 git clone https://github.com/unkyulee/micro-journal
@@ -643,15 +749,15 @@ esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
   0x10000 firmware.bin
 ```
 
-> The patch reproduces the full firmware tree — verified to apply cleanly
-> on the base commit above and to build both `rev_8` and `rev_4_68`.
+> The patch was verified to apply cleanly on the base commit above and to
+> build both `rev_8` and `rev_4_68`.
 
 ## Implementation notes
 
 - Editor engine changes are shared by all Micro Journal revisions but
   gated behind `Editor::selectionSupported`, which only the Rev 8 (RLCD)
   display enables — other devices are unaffected.
-- New key codes are 2100–2130 in `src/service/Editor/Editor.h`; the
+- New key codes are 2100–2144 in `src/service/Editor/Editor.h`; the
   encryption service is `src/service/Crypt/`, note names
   `src/service/NoteNames/`, the LLM service `src/service/AskClaude/`, and
   the HTTPS root CA trust store `src/service/Certs/`.
@@ -662,7 +768,15 @@ esptool.py --chip esp32s3 merge_bin -o firmware_rev_8.bin \
   only font family that stays readable on this panel (condensed fonts pack
   letters together; thin-stroke fonts render ragged). UI text is drawn on a
   fixed, even-aligned cell pitch because the panel stores the horizontal
-  axis at half resolution.
+  axis at half resolution. The editor's status bar uses the same tracked
+  drawing so its smaller font stays legible.
+- The display driver only sends rows that actually changed, and sends each
+  changed run of rows as its own band. A change at the caret and a change
+  in the status bar go out as two small updates instead of one full-screen
+  refresh — which is what keeps dark mode from flickering while you type.
+- Lists have one renumbering routine (`renumberListBlock` in `Editor.cpp`):
+  every list edit changes only the indentation, then the whole list block
+  is rebuilt from it, so numbering can't drift out of sync.
 - The undo engine and the encryption offset math were verified with
   host-side AddressSanitizer harnesses built from the shipped code
   (windowed reads at odd offsets, fast and splice save paths, 300

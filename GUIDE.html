@@ -135,13 +135,14 @@
   <li><a href="#menubar">3 · The menu bar</a></li>
   <li><a href="#write">4 · Writing</a></li>
   <li><a href="#markdown">5 · Markdown styling</a></li>
-  <li><a href="#scratch">6 · The scratchpad</a></li>
-  <li><a href="#gz">7 · Grammana Z</a></li>
-  <li><a href="#grammar">8 · Grammar check</a></li>
-  <li><a href="#lock">9 · Locking a note</a></li>
-  <li><a href="#dark">10 · Dark mode &amp; names</a></li>
-  <li><a href="#about">11 · About &amp; storage</a></li>
-  <li><a href="#cheat">12 · Shortcut cheat sheet</a></li>
+  <li><a href="#lists">6 · Lists</a></li>
+  <li><a href="#scratch">7 · The scratchpad</a></li>
+  <li><a href="#gz">8 · Grammana Z</a></li>
+  <li><a href="#grammar">9 · Grammar check</a></li>
+  <li><a href="#lock">10 · Locking a note</a></li>
+  <li><a href="#dark">11 · Dark mode, fonts &amp; names</a></li>
+  <li><a href="#about">12 · About &amp; storage</a></li>
+  <li><a href="#cheat">13 · Shortcut cheat sheet</a></li>
 </ul>
 
 <h2 id="start"><span class="num">01</span>Getting started</h2>
@@ -271,8 +272,8 @@ right — those fire globally, so you rarely need to open the menu for them.</p>
 <tbody>
 <tr><td>File</td><td>New note; Rename, Lock / Unlock, Clear, Sync (for the selected note)</td></tr>
 <tr><td>Notes</td><td>Every non-empty note, by name — jump straight to one</td></tr>
-<tr><td>Tools</td><td>Grammana Z, Scratchpad</td></tr>
-<tr><td>Setup</td><td>WiFi, Language, BLE keyboard, Dark mode, Sync all</td></tr>
+<tr><td>Tools</td><td>Grammana Z, Scratchpad; inside a note also Format and Shortcuts</td></tr>
+<tr><td>Setup</td><td>WiFi, Language, BLE keyboard, Dark mode, WordGrinder view; inside a note also Font; Sync all</td></tr>
 <tr><td>Device</td><td>About, Device name, Storage, Drive mode, Restart</td></tr>
 </tbody>
 </table>
@@ -318,6 +319,25 @@ Jump by word with <span class="key">Ctrl</span>+arrows, or across the whole docu
 with <span class="key">Ctrl</span>+<span class="key">PgUp</span>/<span class="key">PgDn</span>.
 Full list in the <a href="#cheat">cheat sheet</a>.</p>
 
+<h3>Clipboard history</h3>
+<p>The deck remembers your last eight copies and cuts. Press
+<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">V</span> to
+see them: a short preview of each on the left, the full text of the highlighted one on
+the right. Pick with <span class="key">&uarr;</span>/<span class="key">&darr;</span> and
+<span class="key">Enter</span> pastes it. Plain <span class="key">Ctrl</span>+<span class="key">V</span>
+still pastes the most recent one.</p>
+
+<h3>Shortcuts on screen</h3>
+<p>Forgot a key? <span class="key">Ctrl</span>+<span class="key">/</span> (or
+<strong>Tools&nbsp;▸&nbsp;Shortcuts</strong>) opens a scrollable sheet of every shortcut,
+right over your note. <span class="key">Esc</span> closes it.</p>
+
+<div class="callout"><span class="lbl">The Tab key</span>
+The deck's keypad has no key labelled Tab — the key just left of
+<span class="key">Q</span> does the job, and <span class="key">Shift</span> with it is
+Shift+Tab. A USB keyboard's own Tab works too. It matters mostly for
+<a href="#lists">lists</a>; elsewhere it types two spaces.</div>
+
 <h2 id="markdown"><span class="num">05</span>Markdown styling</h2>
 <p>Your files stay plain text, but the screen styles markdown live as you type — so a
 draft reads the way you mean it without any export step.</p>
@@ -343,9 +363,69 @@ draft reads the way you mean it without any export step.</p>
 <p><span class="key">Ctrl</span>+<span class="key">B</span> and
 <span class="key">Ctrl</span>+<span class="key">I</span> wrap the current selection in
 markers (or drop an empty pair to type into). Italic shows as underline because the
-panel can't slant letters.</p>
+panel can't slant letters. <span class="key">Ctrl</span>+<span class="key">1</span> /
+<span class="key">2</span> / <span class="key">3</span> turn the line (or every line of a
+selection) into a <code>#</code>, <code>##</code> or <code>###</code> heading.</p>
 
-<h2 id="scratch"><span class="num">06</span>The scratchpad</h2>
+<h3>The format menu</h3>
+<p>Rather not memorise markers? <span class="key">Ctrl</span>+<span class="key">P</span>
+(or <strong>Tools&nbsp;▸&nbsp;Format</strong>) opens a small menu over the note with every
+style — Bold, Italic, Strike, Code, H1–H3, List, Number and Quote. Arrow to one and press
+<span class="key">Enter</span>, or press its letter.</p>
+
+<h3>WordGrinder view</h3>
+<p>Turn on <strong>Setup&nbsp;▸&nbsp;WordGrinder</strong> for a cleaner page. Every line
+<em>except the one you're editing</em> hides its markers and shows only the result:
+headings lose their <code>#</code> and turn bold, the <code>*</code> and <code>**</code>
+disappear, and quotes keep just their bar. The line with your cursor always shows the
+raw text, so editing works exactly as before — and the file itself never changes.</p>
+
+<h2 id="lists"><span class="num">06</span>Lists</h2>
+<p>Lists work the way they do in Google Docs or Word: they continue when you press
+Enter, nest with Tab, and renumber themselves.</p>
+
+<figure class="screen"><div class="bezel">
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,'Courier New',monospace">
+<rect width="400" height="300" fill="#cbd0c5"/>
+<g font-size="14" fill="#1a1c19">
+<text x="12" y="30">Trip checklist</text>
+<text x="12" y="58">1. Book flights</text>
+<text x="12" y="86">2. Pack</text>
+<text x="36" y="114">a. Chargers</text>
+<text x="36" y="142">b. Notebook</text>
+<text x="60" y="170">1. Spare pens</text>
+<text x="12" y="198">3. Confirm hotel</text>
+<text x="12" y="226">4.</text>
+</g>
+<rect x="38" y="214" width="2" height="16" fill="#1a1c19"/>
+<line x1="0" y1="270" x2="400" y2="270" stroke="#8b9086"/>
+<g font-size="12" fill="#1a1c19"><text x="8" y="289">FILE 4</text><text x="96" y="289">12 WORDS</text><text x="352" y="289">SAVED</text></g>
+</svg>
+</div><figcaption>A nested list — levels alternate numbers and letters, and Enter has started item 4</figcaption></figure>
+
+<p>To start one, select some lines (or just sit on one) and press
+<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">7</span> for
+numbers or <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">8</span>
+for bullets. Typing <code>1.&nbsp;</code> or <code>-&nbsp;</code> at the start of a line works
+too.</p>
+
+<table>
+<thead><tr><th>Press</th><th>On a list item</th></tr></thead>
+<tbody>
+<tr><td><span class="key">Enter</span></td><td>Starts the next item at the same level (in the middle of an item, splits it)</td></tr>
+<tr><td><span class="key">Enter</span> on an empty item</td><td>Steps out one level; at the top level, ends the list</td></tr>
+<tr><td><span class="key">Tab</span></td><td>Indents the item one level (up to five)</td></tr>
+<tr><td><span class="combo"><span class="key">Shift</span><span class="plus">+</span><span class="key">Tab</span></span></td><td>Outdents one level; at the top level, removes the marker</td></tr>
+<tr><td><span class="key">Bksp</span> right after the marker</td><td>Same as Shift+Tab</td></tr>
+</tbody>
+</table>
+
+<p>You never number anything by hand. After every Enter, Tab or Backspace the whole list
+is renumbered from its indentation, so inserting or removing an item in the middle
+leaves no gaps. Top-level items count <code>1. 2. 3.</code>, the next level
+<code>a. b. c.</code>, then numbers again.</p>
+
+<h2 id="scratch"><span class="num">07</span>The scratchpad</h2>
 <p>Press <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">S</span>
 anywhere — or tap the <strong>Scratch</strong> tile — to open the scratchpad, an
 always-there note for lists and stray thoughts. <span class="key">Esc</span> returns
@@ -372,7 +452,7 @@ to stash a line while you write. A <code>SENT TO SCRATCH</code> flash confirms i
 </svg>
 </div><figcaption>Selecting a line and pressing the shortcut stashes it — the flash confirms</figcaption></figure>
 
-<h2 id="gz"><span class="num">07</span>Grammana Z</h2>
+<h2 id="gz"><span class="num">08</span>Grammana Z</h2>
 <p>Grammana Z is an on-device assistant, powered by your choice of Anthropic, OpenAI,
 or Gemini. Open it from the <strong>Gramma</strong> tile, with <span class="key">G</span>,
 or with <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">C</span>.
@@ -400,7 +480,7 @@ to send — you can keep typing while it thinks.</p>
 turns, so follow-ups keep their context. Select-all and delete to start fresh;
 <span class="key">Esc</span> returns to your writing.</p>
 
-<h2 id="grammar"><span class="num">08</span>Grammar check</h2>
+<h2 id="grammar"><span class="num">09</span>Grammar check</h2>
 <p><span class="key">Ctrl</span>+<span class="key">G</span> reviews your file — or just a
 selection — and lists what to fix, each with the phrase, the problem, and the
 correction. <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">G</span>
@@ -424,7 +504,7 @@ never touched.</p>
 </svg>
 </div><figcaption>A grammar report — copyable, and your original stays put</figcaption></figure>
 
-<h2 id="lock"><span class="num">09</span>Locking a note</h2>
+<h2 id="lock"><span class="num">10</span>Locking a note</h2>
 <p>Highlight a note on the home screen and press <span class="key">Ctrl+L</span> (or
 <strong>File&nbsp;▸&nbsp;Lock&nbsp;/&nbsp;Unlock</strong>) to set a password. The note
 is re-written as real <strong>AES-256 ciphertext</strong> — plaintext never touches
@@ -453,7 +533,7 @@ asks for the password.</p>
   next time.
 </div>
 
-<h2 id="dark"><span class="num">10</span>Dark mode &amp; names</h2>
+<h2 id="dark"><span class="num">11</span>Dark mode, fonts &amp; names</h2>
 <p><span class="key">I</span> on the home screen (or <strong>Setup&nbsp;▸&nbsp;Dark</strong>)
 flips the whole panel to white-on-black — handy at night, and it sticks across reboots.
 Everything renders inverted, including selection and markdown.</p>
@@ -472,6 +552,12 @@ Everything renders inverted, including selection and markdown.</p>
 </svg>
 </div><figcaption>Dark mode — hardware panel inversion</figcaption></figure>
 
+<p><strong>Fonts.</strong> Inside a note, <strong>Setup&nbsp;▸&nbsp;Font</strong> opens a
+font picker: arrow to one and press <span class="key">Enter</span> (or its number). The
+note re-flows immediately and the choice is remembered. You can pick ProFont (the
+default, and the clearest on this panel) in two sizes plus a bold, JetBrains Mono — a
+typewriter-style face — in two sizes, regular or bold, and the Korean fonts.</p>
+
 <p><strong>Naming things.</strong> Give a note a real name with
 <span class="key">Ctrl+R</span> (or <strong>File&nbsp;▸&nbsp;Rename</strong>): type into the
 dialog, <span class="key">Enter</span> saves, and the name shows on the home screen, in
@@ -479,7 +565,7 @@ the Notes menu, and on the synced file. To rename the whole device, open
 <strong>Device&nbsp;▸&nbsp;Device&nbsp;name</strong> — the name you set shows on the
 home window's title bar. Both persist across reboots.</p>
 
-<h2 id="about"><span class="num">11</span>About &amp; storage</h2>
+<h2 id="about"><span class="num">12</span>About &amp; storage</h2>
 <p>The <strong>Device</strong> menu has two info screens. <strong>About</strong> shows
 the classic Happy Mac with your device name and the firmware version;
 <strong>Storage</strong> is a Get-Info box with a usage gauge and the real free space
@@ -542,11 +628,13 @@ on the deck. <span class="key">Esc</span> returns home from either.</p>
 </div><figcaption>Storage — a usage gauge with real total, used, and free space</figcaption></figure>
 
 <p><strong>Sync.</strong> With WiFi and a sync URL configured,
-<strong>Setup&nbsp;▸&nbsp;Sync</strong> uploads the current note to Google Drive, and
-the file there is titled after the note's name. See the README for the one-time Apps
-Script setup.</p>
+<span class="key">Ctrl</span>+<span class="key">S</span> (or <strong>File&nbsp;▸&nbsp;Sync</strong>)
+uploads the selected or current note to Google Drive — started from inside a note, it
+brings you back there when it's done — and <strong>Setup&nbsp;▸&nbsp;Sync&nbsp;all</strong>
+uploads every note in one go. Files on Drive are titled after the note's name. See the
+README for the one-time Apps Script setup.</p>
 
-<h2 id="cheat"><span class="num">12</span>Shortcut cheat sheet</h2>
+<h2 id="cheat"><span class="num">13</span>Shortcut cheat sheet</h2>
 <p><span class="key">Ctrl</span> and <span class="key">GUI</span> are interchangeable
 everywhere below.</p>
 
@@ -557,11 +645,17 @@ everywhere below.</p>
 <tr><td>Select word / line</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">arrows</span></span></td></tr>
 <tr><td>Select all</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">A</span></span></td></tr>
 <tr><td>Cut / copy / paste</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">X</span> <span class="key">C</span> <span class="key">V</span></span></td></tr>
+<tr><td>Clipboard history</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">V</span></span></td></tr>
 <tr><td>Move by word</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">&larr;/&rarr;</span></span></td></tr>
 <tr><td>Start / end of document</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">PgUp</span> / <span class="key">PgDn</span></span></td></tr>
 <tr><td>Delete word left</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Bksp</span></span></td></tr>
 <tr><td>Undo / redo</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Z</span> / <span class="key">Y</span></span></td></tr>
 <tr><td>Bold / italic</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">B</span> / <span class="key">I</span></span></td></tr>
+<tr><td>Heading 1 / 2 / 3</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">1</span> / <span class="key">2</span> / <span class="key">3</span></span></td></tr>
+<tr><td>Format menu</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">P</span></span></td></tr>
+<tr><td>Numbered / bulleted list</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">7</span> / <span class="key">8</span></span></td></tr>
+<tr><td>Indent / outdent list item</td><td><span class="combo"><span class="key">Tab</span> / <span class="key">Shift</span><span class="plus">+</span><span class="key">Tab</span></span></td></tr>
+<tr><td>Shortcuts sheet</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">/</span></span></td></tr>
 <tr><td>New note</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">N</span></span></td></tr>
 <tr><td>Clear / lock / rename / sync note</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">C</span> / <span class="key">L</span> / <span class="key">R</span> / <span class="key">S</span></span></td></tr>
 <tr><td>Scratchpad (or send selection)</td><td><span class="combo"><span class="key">Ctrl</span><span class="plus">+</span><span class="key">Shift</span><span class="plus">+</span><span class="key">S</span></span></td></tr>
